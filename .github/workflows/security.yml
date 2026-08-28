@@ -1,0 +1,22 @@
+name: security
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
+          cache: npm
+      - run: npm ci
+      - run: npm audit --omit=dev
+      - run: npm audit
+        continue-on-error: true
+      - run: npm run test:security
+      - run: npm run audit:package

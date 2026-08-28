@@ -1,0 +1,176 @@
+import type { SerializedInternalError } from "../errors.ts";
+import type { BackoffConfig, JobStatus, JsonValue, StoredError } from "../types.ts";
+
+export type StorageOp =
+  | "init"
+  | "enqueue"
+  | "get"
+  | "count"
+  | "claim"
+  | "heartbeat"
+  | "settleSuccess"
+  | "settleFailure"
+  | "manualRetry"
+  | "cancelQueued"
+  | "clean"
+  | "recoverExpired"
+  | "startLeaseTracking"
+  | "stopLeaseTracking"
+  | "nextWakeHint"
+  | "close"
+  | "test.configureFault"
+  | "test.setNow"
+  | "test.getNow"
+  | "test.tickLeases";
+
+export type StorageRequest = {
+  id: string;
+  op: StorageOp;
+  payload: unknown;
+};
+
+export type StorageSuccess = {
+  id: string;
+  ok: true;
+  result: unknown;
+};
+
+export type StorageFailure = {
+  id: string;
+  ok: false;
+  error: SerializedInternalError;
+};
+
+export type StorageResponse = StorageSuccess | StorageFailure;
+
+export type WorkerEventMessage = {
+  type: "event";
+  event: "attemptTimeout" | "leaseLost";
+  jobId: string;
+  generation: number;
+};
+
+export type JobRow = {
+  id: string;
+  queue: string;
+  name: string;
+  payload_json: string;
+  status: JobStatus;
+  priority: number;
+  available_at: number;
+  attempt_count: number;
+  max_attempts: number;
+  backoff_type: "none" | "fixed" | "exponential";
+  backoff_delay_ms: number;
+  backoff_max_delay_ms: number | null;
+  attempt_timeout_ms: number | null;
+  lease_owner: string | null;
+  lease_generation: number;
+  lease_expires_at: number | null;
+  dedupe_key: string | null;
+  result_json: string | null;
+  error_json: string | null;
+  created_at: number;
+  updated_at: number;
+  started_at: number | null;
+  completed_at: number | null;
+  failed_at: number | null;
+  cancelled_at: number | null;
+};
+
+export type EnqueuePayload = {
+  nowMs: number;
+  queue: string;
+  name: string;
+  payloadJson: string;
+  maxAttempts: number;
+  delayMs: number;
+  priority: number;
+  dedupeKey: string | null;
+  attemptTimeoutMs: number | null;
+  backoff: BackoffConfig;
+};
+
+export type ClaimPayload = {
+  nowMs: number;
+  queue: string;
+  workerId: string;
+  names: string[];
+  leaseDurationMs: number;
+};
+
+export type SettleSuccessPayload = {
+  nowMs: number;
+  id: string;
+  workerId: string;
+  generation: number;
+  resultJson: string;
+};
+
+export type SettleFailurePayload = {
+  nowMs: number;
+  id: string;
+  workerId: string;
+  generation: number;
+  error: StoredError;
+  nonRetryable: boolean;
+};
+
+export type HeartbeatPayload = {
+  nowMs: number;
+  id: string;
+  workerId: string;
+  generation: number;
+  leaseDurationMs: number;
+};
+
+export type TrackPayload = {
+  jobId: string;
+  workerId: string;
+  generation: number;
+  leaseDurationMs: number;
+  heartbeatIntervalMs: number;
+  attemptDeadlineMs: number | null;
+};
+
+export type FaultSpec = {
+  point: string;
+  action: "throw" | "exit" | "hang" | "none";
+};
+
+export function isStorageRequest(value: unknown): value is StorageRequest {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.id === "string" && typeof v.op === "string";
+}
+
+export function backoffToColumns(backoff: BackoffConfig): {
+  backoff_type: "none" | "fixed" | "exponential";
+  backoff_delay_ms: number;
+  backoff_max_delay_ms: number | null;
+} {
+  if (backoff.type === "none") {
+    return { backoff_type: "none", backoff_delay_ms: 0, backoff_max_delay_ms: null };
+  }
+  if (backoff.type === "fixed") {
+    return { backoff_type: "fixed", backoff_delay_ms: backoff.delayMs, backoff_max_delay_ms: null };
+  }
+  return {
+    backoff_type: "exponential",
+    backoff_delay_ms: backoff.delayMs,
+    backoff_max_delay_ms: backoff.maxDelayMs,
+  };
+}
+
+export function backoffFromColumns(
+  type: string,
+  delayMs: number,
+  maxDelayMs: number | null,
+): BackoffConfig {
+  if (type === "fixed") return { type: "fixed", delayMs };
+  if (type === "exponential")
+    return { type: "exponential", delayMs, maxDelayMs: maxDelayMs ?? delayMs };
+  return { type: "none" };
+}
+
+export { type JsonValue };

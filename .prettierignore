@@ -1,0 +1,8 @@
+node_modules
+dist
+coverage
+.stryker-tmp
+reports
+package-lock.json
+*.tgz
+durableq-v0.1-implementation-rfc.md

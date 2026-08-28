@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "packageManager": "npm",
+  "testRunner": "command",
+  "commandRunner": {
+    "command": "node --test tests/unit/json-codec.test.ts tests/unit/backoff.test.ts tests/unit/validation.test.ts tests/unit/error-codec.test.ts tests/unit/domain-edges.test.ts"
+  },
+  "mutate": ["src/codec/**/*.ts", "src/retry/**/*.ts", "src/validation.ts"],
+  "mutator": {
+    "excludedMutations": ["StringLiteral", "ArithmeticOperator", "ObjectLiteral"]
+  },
+  "thresholds": { "high": 90, "low": 75, "break": 75 },
+  "reporters": ["clear-text", "progress"],
+  "concurrency": 4,
+  "timeoutMS": 30000
+}

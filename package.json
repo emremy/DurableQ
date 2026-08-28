@@ -1,0 +1,75 @@
+{
+  "name": "durableq",
+  "version": "0.1.0",
+  "description": "Durable background jobs for Node.js, powered only by built-in SQLite. No Redis. No native dependencies. No infrastructure.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.15.0"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "pretest": "node scripts/check-node-engine.mjs",
+    "test": "node --test --test-reporter=spec tests/unit/**/*.test.ts tests/integration/**/*.test.ts",
+    "test:unit": "node --test --test-reporter=spec tests/unit/**/*.test.ts",
+    "test:property": "node --test --test-reporter=spec tests/property/**/*.test.ts",
+    "test:integration": "node --test --test-reporter=spec tests/integration/**/*.test.ts",
+    "test:contract": "node --test --test-reporter=spec tests/contract/**/*.test.ts",
+    "test:concurrency": "node --test --test-reporter=spec tests/concurrency/**/*.test.ts",
+    "test:crash": "node --test --test-reporter=spec tests/crash/**/*.test.ts",
+    "test:real-world": "node --test --test-reporter=spec tests/real-world/**/*.test.ts",
+    "test:security": "node --test --test-reporter=spec tests/security/**/*.test.ts",
+    "test:performance": "node --test --test-reporter=spec tests/performance/**/*.test.ts",
+    "test:model": "node --test --test-reporter=spec tests/model/**/*.test.ts",
+    "test:soak": "node --test --test-reporter=spec tests/soak/**/*.test.ts",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-exclude=**/tests/** --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85 tests/unit/**/*.test.ts tests/integration/**/*.test.ts tests/property/**/*.test.ts tests/model/**/*.test.ts",
+    "test:mutation": "stryker run",
+    "audit:tests": "node scripts/audit-tests.mjs",
+    "audit:package": "node scripts/inspect-package.mjs",
+    "audit:all": "npm run audit:tests && npm audit --omit=dev && npm run audit:package",
+    "prepack": "npm run typecheck && npm run build"
+  },
+  "keywords": [
+    "queue",
+    "jobs",
+    "sqlite",
+    "background",
+    "durable",
+    "worker"
+  ],
+  "author": "durableq contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/emremy/durableq"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@stryker-mutator/core": "^9.4.0",
+    "@stryker-mutator/typescript-checker": "^9.4.0",
+    "@types/node": "^24.10.1",
+    "eslint": "^9.39.1",
+    "fast-check": "^4.5.3",
+    "prettier": "^3.7.4",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.48.0"
+  }
+}
