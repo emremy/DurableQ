@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { npmFailed, runNpm } from "../support/run-npm.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -16,9 +16,6 @@ test("public exports do not include test hooks or storage RPC", () => {
 });
 
 test("npm pack dry-run succeeds", () => {
-  const pack = spawnSync("npm", ["pack", "--dry-run", "--ignore-scripts"], {
-    cwd: root,
-    encoding: "utf8",
-  });
-  assert.equal(pack.status, 0, pack.stderr);
+  const pack = runNpm(["pack", "--dry-run", "--ignore-scripts"], root);
+  assert.equal(pack.status, 0, npmFailed(pack));
 });

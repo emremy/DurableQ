@@ -5,15 +5,21 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { npmFailed, runNpm } from "../support/run-npm.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
 test("tarball installs in a fresh project", () => {
-  const build = spawnSync("npm", ["run", "build"], { cwd: root, encoding: "utf8" });
-  assert.equal(build.status, 0, build.stderr + build.stdout);
-  const pack = spawnSync("npm", ["pack", "--ignore-scripts"], { cwd: root, encoding: "utf8" });
-  assert.equal(pack.status, 0, pack.stderr);
-  const tarball = pack.stdout.trim().split("\n").at(-1);
+  const build = runNpm(["run", "build"], root);
+  assert.equal(build.status, 0, npmFailed(build));
+  const pack = runNpm(["pack", "--ignore-scripts"], root);
+  assert.equal(pack.status, 0, npmFailed(pack));
+  const tarball = pack.stdout
+    .trim()
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.endsWith(".tgz"))
+    .at(-1);
   assert.ok(tarball && tarball.endsWith(".tgz"));
   const dir = mkdtempSync(join(tmpdir(), "durableq-consumer-"));
   try {
@@ -21,11 +27,8 @@ test("tarball installs in a fresh project", () => {
       join(dir, "package.json"),
       JSON.stringify({ name: "consumer", type: "module", private: true }),
     );
-    const install = spawnSync("npm", ["install", join(root, tarball)], {
-      cwd: dir,
-      encoding: "utf8",
-    });
-    assert.equal(install.status, 0, install.stderr);
+    const install = runNpm(["install", join(root, tarball)], dir);
+    assert.equal(install.status, 0, npmFailed(install));
     const run = spawnSync(
       process.execPath,
       ["-e", "import { Queue } from 'durableq'; console.log(typeof Queue);"],

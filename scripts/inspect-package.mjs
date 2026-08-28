@@ -25,6 +25,7 @@ if (pkg.type !== "module") {
 const packed = spawnSync("npm", ["pack", "--ignore-scripts"], {
   cwd: root,
   encoding: "utf8",
+  shell: process.platform === "win32",
 });
 if (packed.status !== 0) {
   console.error(packed.stderr);
@@ -33,7 +34,7 @@ if (packed.status !== 0) {
 
 const tarball = packed.stdout
   .trim()
-  .split("\n")
+  .split(/\r?\n/)
   .map((l) => l.trim())
   .filter((l) => l.endsWith(".tgz"))
   .at(-1);
