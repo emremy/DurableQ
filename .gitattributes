@@ -1,0 +1,3 @@
+# Checkout as LF on every OS so Prettier format:check is identical
+# on Linux, macOS, and Windows CI.
+* text=auto eol=lf
