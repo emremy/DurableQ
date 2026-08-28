@@ -3,7 +3,7 @@ import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { DurableQSerializationError } from "../../src/errors.ts";
 import { assertDatabaseInvariants } from "../support/assert-db-invariants.ts";
-import { configureFault } from "../support/test-control.ts";
+import { configureFault, rawRequest } from "../support/test-control.ts";
 import { openQueue } from "../support/open-queue.ts";
 import { tempDbPath } from "../support/temp-db.ts";
 
@@ -98,8 +98,7 @@ test("INV-023 cancel active is explicit non-success", async () => {
   const q = openQueue(tmp.path);
   try {
     const { job } = await q.add("n", { v: 1 });
-    const client = await q.storage();
-    await client.request("claim", {
+    await rawRequest(q, "claim", {
       nowMs: Date.now(),
       queue: "app",
       workerId: "w",
@@ -121,8 +120,7 @@ test("INV-012 delayed jobs are not claimed early", async () => {
   const q = openQueue(tmp.path);
   try {
     await q.add("n", { v: 1 }, { delayMs: 60_000 });
-    const client = await q.storage();
-    const claimed = await client.request("claim", {
+    const claimed = await rawRequest(q, "claim", {
       nowMs: Date.now(),
       queue: "app",
       workerId: "w",

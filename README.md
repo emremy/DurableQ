@@ -119,11 +119,7 @@ process.once("SIGTERM", shutdown);
 DurableQ can infer the input and output type for every named job.
 
 ```ts
-import {
-  Queue,
-  Worker,
-  NonRetryableError,
-} from "durableq";
+import { Queue, Worker, NonRetryableError } from "durableq";
 
 type Jobs = {
   "email.send": {
@@ -189,15 +185,10 @@ const worker = new Worker(
 
     "report.generate": async (job, ctx) => {
       try {
-        return await generateReport(
-          job.data.userId,
-          ctx.signal,
-        );
+        return await generateReport(job.data.userId, ctx.signal);
       } catch (error) {
         if (isPermanentReportError(error)) {
-          throw new NonRetryableError(
-            "The report cannot be generated.",
-          );
+          throw new NonRetryableError("The report cannot be generated.");
         }
 
         throw error;
@@ -293,13 +284,9 @@ The caller cannot know whether the enqueue succeeded.
 Use the same `dedupeKey` when retrying an indeterminate enqueue.
 
 ```ts
-await queue.add(
-  "email.send",
-  data,
-  {
-    dedupeKey: "welcome:user:123",
-  },
-);
+await queue.add("email.send", data, {
+  dedupeKey: "welcome:user:123",
+});
 ```
 
 ---
@@ -396,54 +383,40 @@ The defaults include safety margin, but extreme OS stalls or storage contention 
 A job can specify its maximum number of attempts.
 
 ```ts
-await queue.add(
-  "email.send",
-  data,
-  {
-    attempts: 5,
-  },
-);
+await queue.add("email.send", data, {
+  attempts: 5,
+});
 ```
 
 Use fixed backoff:
 
 ```ts
-await queue.add(
-  "email.send",
-  data,
-  {
-    attempts: 5,
-    backoff: {
-      type: "fixed",
-      delayMs: 5_000,
-    },
+await queue.add("email.send", data, {
+  attempts: 5,
+  backoff: {
+    type: "fixed",
+    delayMs: 5_000,
   },
-);
+});
 ```
 
 Or exponential backoff:
 
 ```ts
-await queue.add(
-  "email.send",
-  data,
-  {
-    attempts: 5,
-    backoff: {
-      type: "exponential",
-      delayMs: 1_000,
-      maxDelayMs: 60_000,
-    },
+await queue.add("email.send", data, {
+  attempts: 5,
+  backoff: {
+    type: "exponential",
+    delayMs: 1_000,
+    maxDelayMs: 60_000,
   },
-);
+});
 ```
 
 Throw `NonRetryableError` for permanent failures:
 
 ```ts
-throw new NonRetryableError(
-  "The destination rejected this request permanently.",
-);
+throw new NonRetryableError("The destination rejected this request permanently.");
 ```
 
 This skips the remaining automatic retries.
@@ -463,21 +436,13 @@ queue + job name + dedupe key
 Example:
 
 ```ts
-const first = await queue.add(
-  "email.send",
-  data,
-  {
-    dedupeKey: "welcome:user:123",
-  },
-);
+const first = await queue.add("email.send", data, {
+  dedupeKey: "welcome:user:123",
+});
 
-const second = await queue.add(
-  "email.send",
-  data,
-  {
-    dedupeKey: "welcome:user:123",
-  },
-);
+const second = await queue.add("email.send", data, {
+  dedupeKey: "welcome:user:123",
+});
 
 console.log(first.deduplicated);
 // false
@@ -514,13 +479,9 @@ Among jobs that are currently eligible for execution, DurableQ orders claims by:
 Example:
 
 ```ts
-await queue.add(
-  "email.send",
-  data,
-  {
-    priority: 100,
-  },
-);
+await queue.add("email.send", data, {
+  priority: 100,
+});
 ```
 
 Strict priority can starve lower-priority jobs. DurableQ does not currently implement priority aging or fairness scheduling.
@@ -768,13 +729,10 @@ const queue = new Queue<Jobs>("app", {
 Adds a job.
 
 ```ts
-const result = await queue.add(
-  "email.send",
-  {
-    to: "foo@example.com",
-    subject: "Welcome",
-  },
-);
+const result = await queue.add("email.send", {
+  to: "foo@example.com",
+  subject: "Welcome",
+});
 ```
 
 The result contains the job and whether the request was deduplicated.
@@ -826,6 +784,7 @@ await queue.retry(jobId);
 ```
 
 Manual retry does not reset `attempt_count` and does not release the existing dedupe key.
+It clears the stored error so the job returns to a clean queued state.
 
 ### `queue.clean(options)`
 

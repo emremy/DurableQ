@@ -6,6 +6,7 @@ import { assertBackoff, delayAfterFailedAttempt } from "../../src/retry/backoff.
 import { backoffFromColumns, backoffToColumns } from "../../src/storage/protocol.ts";
 import { DurableQValidationError } from "../../src/errors.ts";
 import { openQueue } from "../support/open-queue.ts";
+import { rawRequest } from "../support/test-control.ts";
 import { tempDbPath } from "../support/temp-db.ts";
 
 test("frozen clock set and advance", () => {
@@ -65,15 +66,14 @@ test("queue get/clean/retry validation and manual retry", async () => {
     const { job } = await q.add("n", { v: 1 }, { attempts: 1 });
     const queuedRetry = await q.retry(job.id);
     assert.equal(queuedRetry.retried, false);
-    const client = await q.storage();
-    await client.request("claim", {
+    await rawRequest(q, "claim", {
       nowMs: Date.now(),
       queue: q.name,
       workerId: "w",
       names: ["n"],
       leaseDurationMs: 30_000,
     });
-    await client.request("settleFailure", {
+    await rawRequest(q, "settleFailure", {
       nowMs: Date.now(),
       id: job.id,
       workerId: "w",
@@ -83,10 +83,12 @@ test("queue get/clean/retry validation and manual retry", async () => {
     });
     const retried = await q.retry(job.id);
     assert.equal(retried.retried, true);
+    if (!retried.retried) throw new Error("expected retry");
+    assert.equal(retried.job.error, null);
     const missing = await q.retry("nope");
     assert.equal(missing.retried, false);
     await q.add("later", { v: 2 }, { delayMs: 60_000 });
-    const hint = await client.request("nextWakeHint", {
+    const hint = await rawRequest(q, "nextWakeHint", {
       queue: q.name,
       names: ["later"],
       nowMs: Date.now(),

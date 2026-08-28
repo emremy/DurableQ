@@ -1,12 +1,12 @@
 import { closeSync, mkdirSync, openSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { DurableQValidationError } from "../errors.ts";
 import { StorageClient, spawnStorageWorker } from "./client.ts";
 
 export type RuntimeHandle = {
   client: StorageClient;
   path: string;
   busyTimeoutMs: number;
-  ref(): void;
   unref(): Promise<void>;
 };
 
@@ -31,11 +31,15 @@ export function canonicalPath(filePath: string): string {
 export async function acquireRuntime(opts: {
   path: string;
   busyTimeoutMs: number;
-  enableTestHooks?: boolean;
 }): Promise<RuntimeHandle> {
   const key = canonicalPath(opts.path);
   const existing = registry.get(key);
   if (existing) {
+    if (existing.busyTimeoutMs !== opts.busyTimeoutMs) {
+      throw new DurableQValidationError(
+        `database is already open with busyTimeoutMs=${existing.busyTimeoutMs}, got ${opts.busyTimeoutMs}`,
+      );
+    }
     existing.refs += 1;
     try {
       await existing.ready;
@@ -61,8 +65,6 @@ export async function acquireRuntime(opts: {
       .request("init", {
         path: key,
         busyTimeoutMs: opts.busyTimeoutMs,
-        enableTestHooks:
-          opts.enableTestHooks === true || process.env.DURABLEQ_ENABLE_TEST_HOOKS === "1",
       })
       .then(() => undefined),
   };
@@ -85,9 +87,6 @@ function handleFrom(entry: Entry, key: string): RuntimeHandle {
     client: entry.client,
     path: entry.path,
     busyTimeoutMs: entry.busyTimeoutMs,
-    ref() {
-      entry.refs += 1;
-    },
     async unref() {
       entry.refs -= 1;
       if (entry.refs <= 0) {

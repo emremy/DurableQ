@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { RECOVERY_BATCH_SIZE } from "../constants.ts";
-import { DurableQStaleLeaseError, DurableQValidationError } from "../errors.ts";
+import { DurableQStaleLeaseError } from "../errors.ts";
 import { serializeStoredError, storedErrorToJson } from "../codec/error.ts";
 import { newJobId } from "../ids.ts";
 import { sqliteRowToJobRow } from "../job.ts";
@@ -362,6 +362,7 @@ export function manualRetry(
          available_at = @now,
          max_attempts = @max_attempts,
          failed_at = NULL,
+         error_json = NULL,
          updated_at = @now
        WHERE id = @id AND status = 'failed'
        RETURNING ${JOB_COLS}`,
@@ -483,17 +484,4 @@ export function nextWakeHint(
   if (!row || row.t === null) return null;
   const t = Number(row.t);
   return t > nowMs ? t : nowMs;
-}
-
-export function requireStatus(status: string): JobStatus {
-  if (
-    status === "queued" ||
-    status === "active" ||
-    status === "completed" ||
-    status === "failed" ||
-    status === "cancelled"
-  ) {
-    return status;
-  }
-  throw new DurableQValidationError(`invalid status ${status}`);
 }

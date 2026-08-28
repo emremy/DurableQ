@@ -42,6 +42,7 @@
     "test:soak": "node --test --test-reporter=spec tests/soak/**/*.test.ts",
     "test:coverage": "node --test --experimental-test-coverage --test-coverage-exclude=**/tests/** --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85 tests/unit/**/*.test.ts tests/integration/**/*.test.ts tests/property/**/*.test.ts tests/model/**/*.test.ts",
     "test:mutation": "stryker run",
+    "test:mutation:ops": "stryker run stryker.ops.config.json",
     "audit:tests": "node scripts/audit-tests.mjs",
     "audit:package": "node scripts/inspect-package.mjs",
     "audit:all": "npm run audit:tests && npm audit --omit=dev && npm run audit:package",

@@ -14,14 +14,40 @@ function clip(text: string, maxChars: number): string {
   return text.slice(0, Math.max(0, maxChars - 1)) + "…";
 }
 
+function storedErrorParts(err: unknown): {
+  name: string;
+  message: string;
+  stack: string | undefined;
+  code: string | number | undefined;
+} {
+  if (
+    err !== null &&
+    typeof err === "object" &&
+    !(err instanceof Error) &&
+    typeof (err as { name?: unknown }).name === "string" &&
+    typeof (err as { message?: unknown }).message === "string"
+  ) {
+    const stored = err as StoredError;
+    return {
+      name: stored.name,
+      message: stored.message,
+      stack: typeof stored.stack === "string" ? stored.stack : undefined,
+      code: asCode(stored.code),
+    };
+  }
+  return {
+    name: err instanceof Error ? err.name : "Error",
+    message: err instanceof Error ? err.message : String(err),
+    stack: err instanceof Error ? err.stack : undefined,
+    code:
+      err && typeof err === "object" && "code" in err
+        ? asCode((err as { code: unknown }).code)
+        : undefined,
+  };
+}
+
 export function serializeStoredError(err: unknown, maxBytes = MAX_STORED_ERROR_BYTES): StoredError {
-  const name = err instanceof Error ? err.name : "Error";
-  const message = err instanceof Error ? err.message : String(err);
-  const stack = err instanceof Error ? err.stack : undefined;
-  const code =
-    err && typeof err === "object" && "code" in err
-      ? asCode((err as { code: unknown }).code)
-      : undefined;
+  const { name, message, stack, code } = storedErrorParts(err);
 
   const base: StoredError = { name: clip(name, 256), message: clip(message, 8_192) };
   if (code !== undefined) base.code = code;

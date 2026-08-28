@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -10,7 +10,7 @@ import { openQueue } from "../support/open-queue.ts";
 import { tempDbPath } from "../support/temp-db.ts";
 import { assertDatabaseInvariants } from "../support/assert-db-invariants.ts";
 import { eventually } from "../support/eventually.ts";
-import { tickLeases } from "../support/test-control.ts";
+import { configureFault, tickLeases } from "../support/test-control.ts";
 import { Worker } from "../../src/worker.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -154,8 +154,7 @@ test("CR-006 kill storage worker thread rejects outstanding RPCs", async () => {
   const q = openQueue(tmp.path);
   try {
     await q.count();
-    const client = await q.storage();
-    await client.request("test.configureFault", { point: "enqueue:before-begin", action: "exit" });
+    await configureFault(q, { point: "enqueue:before-begin", action: "exit" });
     await assert.rejects(() => q.add("x", { a: 1 }), /storage worker/i);
   } finally {
     await q.close().catch(() => undefined);
@@ -253,3 +252,56 @@ test("CR-004 crash after side effect before ACK is at-least-once", async () => {
     tmp.cleanup();
   }
 });
+
+function pragmaIntegrity(dbPath: string): void {
+  const db = new DatabaseSync(dbPath, { timeout: 5000, defensive: true, allowExtension: false });
+  try {
+    const integrity = db.prepare("PRAGMA integrity_check").get() as { integrity_check: string };
+    assert.equal(integrity.integrity_check, "ok", JSON.stringify(integrity));
+    const fk = db.prepare("PRAGMA foreign_key_check").all() as unknown[];
+    assert.equal(fk.length, 0, JSON.stringify(fk));
+  } finally {
+    db.close();
+  }
+}
+
+for (const mode of ["enqueue", "claim", "settle"] as const) {
+  test(`SIGKILL during ${mode} before COMMIT rolls back the open transaction`, async () => {
+    const tmp = tempDbPath();
+    const gateDir = join(tmp.dir, "gate");
+    mkdirSync(gateDir, { recursive: true });
+    const child = spawn(
+      process.execPath,
+      [join(root, "tests/fixtures/processes/kill-before-commit.ts"), tmp.path, mode, gateDir],
+      { cwd: root },
+    );
+    try {
+      await eventually(
+        () => {
+          assert.equal(existsSync(join(gateDir, "paused")), true);
+        },
+        { timeoutMs: 10_000 },
+      );
+      child.kill("SIGKILL");
+      await new Promise((r) => child.on("close", r));
+      pragmaIntegrity(tmp.path);
+      const q = openQueue(tmp.path);
+      try {
+        if (mode === "enqueue") {
+          assert.equal(await q.count(), 0);
+        } else if (mode === "claim") {
+          assert.equal(await q.count({ status: "queued" }), 1);
+          assert.equal(await q.count({ status: "active" }), 0);
+        } else {
+          assert.equal(await q.count({ status: "active" }), 1);
+          assert.equal(await q.count({ status: "completed" }), 0);
+        }
+        assertDatabaseInvariants(tmp.path);
+      } finally {
+        await q.close();
+      }
+    } finally {
+      tmp.cleanup();
+    }
+  });
+}

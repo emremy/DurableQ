@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
+import { readFileSync, unlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -22,7 +22,7 @@ if (pkg.type !== "module") {
   process.exit(1);
 }
 
-const packed = spawnSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
+const packed = spawnSync("npm", ["pack", "--ignore-scripts"], {
   cwd: root,
   encoding: "utf8",
 });
@@ -31,9 +31,30 @@ if (packed.status !== 0) {
   process.exit(packed.status ?? 1);
 }
 
-const data = JSON.parse(packed.stdout);
-const files = (data[0]?.files ?? data.files ?? []).map((f) => f.path ?? f);
-const forbidden = files.filter(
+const tarball = packed.stdout
+  .trim()
+  .split("\n")
+  .map((l) => l.trim())
+  .filter((l) => l.endsWith(".tgz"))
+  .at(-1);
+if (!tarball) {
+  console.error("npm pack did not print a tarball name");
+  process.exit(1);
+}
+
+const listed = spawnSync("tar", ["tzf", tarball], { cwd: root, encoding: "utf8" });
+if (listed.status !== 0) {
+  console.error(listed.stderr);
+  process.exit(listed.status ?? 1);
+}
+
+const files = listed.stdout
+  .split("\n")
+  .map((l) => l.trim())
+  .filter(Boolean)
+  .map((p) => p.replace(/^package\//, ""));
+
+const forbiddenPaths = files.filter(
   (p) =>
     p.startsWith("tests/") ||
     p.startsWith("audits/") ||
@@ -41,17 +62,55 @@ const forbidden = files.filter(
     p.endsWith(".db") ||
     p.includes(".env"),
 );
-if (forbidden.length > 0) {
-  console.error("tarball contains forbidden paths:", forbidden);
+if (forbiddenPaths.length > 0) {
+  console.error("tarball contains forbidden paths:", forbiddenPaths);
   process.exit(1);
 }
 
 const required = ["package.json", "LICENSE", "README.md"];
 for (const r of required) {
-  if (!files.includes(r) && !files.some((p) => p === r || p.endsWith("/" + r))) {
+  if (!files.includes(r)) {
     console.error("tarball missing", r, "files=", files);
     process.exit(1);
   }
+}
+
+const deny = [
+  "test.configureFault",
+  "test.setNow",
+  "test.getNow",
+  "test.tickLeases",
+  "DURABLEQ_ENABLE_TEST_HOOKS",
+  "enableTestHooks",
+  "injected fault",
+  "FaultSpec",
+  "configureFault",
+  "storage-worker-hooks",
+];
+
+const packedEntries = listed.stdout
+  .split("\n")
+  .map((l) => l.trim())
+  .filter(Boolean);
+for (const entry of packedEntries) {
+  if (!/\.(js|mjs|cjs|d\.ts|map|json)$/i.test(entry)) continue;
+  const extracted = spawnSync("tar", ["xOf", tarball, entry], { cwd: root, encoding: "utf8" });
+  if (extracted.status !== 0) {
+    console.error("failed to extract", entry, extracted.stderr);
+    process.exit(1);
+  }
+  for (const token of deny) {
+    if (extracted.stdout.includes(token)) {
+      console.error(`tarball ${entry} contains forbidden identifier: ${token}`);
+      process.exit(1);
+    }
+  }
+}
+
+try {
+  unlinkSync(join(root, tarball));
+} catch {
+  // inspection artifact
 }
 
 console.log("audit:package ok");

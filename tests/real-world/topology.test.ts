@@ -8,6 +8,7 @@ import { Worker } from "../../src/worker.ts";
 import { assertDatabaseInvariants } from "../support/assert-db-invariants.ts";
 import { eventually } from "../support/eventually.ts";
 import { openQueue } from "../support/open-queue.ts";
+import { rawRequest } from "../support/test-control.ts";
 import { tempDbPath } from "../support/temp-db.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -96,8 +97,7 @@ test("RW-003 delayed report does not run early after restart", async () => {
     await q.close();
     await new Promise((r) => setTimeout(r, 80));
     const q2 = openQueue(tmp.path);
-    const client = await q2.storage();
-    const early = await client.request("claim", {
+    const early = await rawRequest(q2, "claim", {
       nowMs: Date.now(),
       queue: q2.name,
       workerId: "w",

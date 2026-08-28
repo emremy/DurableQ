@@ -4,7 +4,7 @@ import { DurableQStaleLeaseError } from "../../src/errors.ts";
 import { createFrozenClock } from "../../src/clock.ts";
 import { Queue } from "../../src/queue.ts";
 import { assertDatabaseInvariants } from "../support/assert-db-invariants.ts";
-import { configureFault, setStorageNow, tickLeases } from "../support/test-control.ts";
+import { configureFault, rawRequest, setStorageNow, tickLeases } from "../support/test-control.ts";
 import { openQueue } from "../support/open-queue.ts";
 import { tempDbPath } from "../support/temp-db.ts";
 
@@ -14,8 +14,7 @@ async function claim(
   lease = 30_000,
   now = Date.now(),
 ) {
-  const client = await q.storage();
-  return client.request("claim", {
+  return rawRequest(q, "claim", {
     nowMs: now,
     queue: q.name,
     workerId: "w1",
@@ -68,8 +67,7 @@ test("INV-026 heartbeat and settle reject expired lease before generation bump",
     };
     assert.ok(claimed);
     assert.equal(claimed.lease_generation, 1);
-    const client = await q.storage();
-    const hbOk = await client.request("heartbeat", {
+    const hbOk = await rawRequest(q, "heartbeat", {
       nowMs: claimed.lease_expires_at,
       id: claimed.id,
       workerId: "w1",
@@ -79,7 +77,7 @@ test("INV-026 heartbeat and settle reject expired lease before generation bump",
     assert.equal(hbOk, false);
     await assert.rejects(
       () =>
-        client.request("settleSuccess", {
+        rawRequest(q, "settleSuccess", {
           nowMs: claimed.lease_expires_at,
           id: claimed.id,
           workerId: "w1",
@@ -112,8 +110,7 @@ test("INV-004 stale completion after newer generation", async () => {
     assert.ok(a);
     await setStorageNow(q, t0 + 50);
     await tickLeases(q);
-    const client = await q.storage();
-    const b = (await client.request("claim", {
+    const b = (await rawRequest(q, "claim", {
       nowMs: t0 + 50,
       queue: q.name,
       workerId: "w2",
@@ -123,7 +120,7 @@ test("INV-004 stale completion after newer generation", async () => {
     assert.equal(b.lease_generation, 2);
     await assert.rejects(
       () =>
-        client.request("settleSuccess", {
+        rawRequest(q, "settleSuccess", {
           nowMs: t0 + 50,
           id: a.id,
           workerId: "w1",
@@ -132,7 +129,7 @@ test("INV-004 stale completion after newer generation", async () => {
         }),
       DurableQStaleLeaseError,
     );
-    const done = await client.request("settleSuccess", {
+    const done = await rawRequest(q, "settleSuccess", {
       nowMs: t0 + 50,
       id: b.id,
       workerId: "w2",
@@ -165,9 +162,8 @@ test("D-006 claim F1-F3 no claim; F4 may claim", async () => {
     assert.ok(still);
     await configureFault(q, { point: "claim:after-commit", action: "throw" });
     await q.add("only", { i: 3 });
-    const client = await q.storage();
     await assert.rejects(() =>
-      client.request("claim", {
+      rawRequest(q, "claim", {
         nowMs: Date.now(),
         queue: q.name,
         workerId: "w1",

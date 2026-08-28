@@ -10,7 +10,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        node: ["24.20.0", "26"]
+        node: ["24.15.0", "24.20.0", "26"]
         include:
           - os: macos-latest
             node: "24.20.0"
@@ -30,6 +30,11 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: npm run test:property
+      - run: npm run test:model
       - run: npm run test:contract
+      - run: npm run test:concurrency
+        if: runner.os == 'Linux'
+      - run: npm run test:crash
+        if: runner.os == 'Linux'
       - run: npm run test:coverage
         if: runner.os == 'Linux'

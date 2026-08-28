@@ -6,7 +6,7 @@ import {
   deserializeInternalError,
 } from "../errors.ts";
 import { newRpcId } from "../ids.ts";
-import type { StorageOp, StorageRequest, StorageResponse, WorkerEventMessage } from "./protocol.ts";
+import type { StorageRequest, StorageResponse, WorkerEventMessage } from "./protocol.ts";
 
 type Pending = {
   resolve: (value: unknown) => void;
@@ -53,7 +53,7 @@ export class StorageClient extends EventEmitter {
     for (const p of pending) p.reject(err);
   }
 
-  async request<T>(op: StorageOp, payload: unknown): Promise<T> {
+  async request<T>(op: string, payload: unknown): Promise<T> {
     if (this.closed) throw new DurableQClosedError("storage client is closed");
     const id = newRpcId();
     const req: StorageRequest = { id, op, payload };
@@ -84,12 +84,18 @@ export class StorageClient extends EventEmitter {
   }
 }
 
+const SPAWN_OVERRIDE = Symbol.for("durableq.spawnStorageWorker");
+
 function workerUrl(): URL {
   const ext = import.meta.url.endsWith(".ts") ? ".ts" : ".js";
   return new URL(`./storage-worker${ext}`, import.meta.url);
 }
 
 export function spawnStorageWorker(): Worker {
+  const override = (globalThis as Record<symbol, unknown>)[SPAWN_OVERRIDE];
+  if (typeof override === "function") {
+    return (override as () => Worker)();
+  }
   return new Worker(workerUrl(), {
     env: process.env,
     execArgv: [],

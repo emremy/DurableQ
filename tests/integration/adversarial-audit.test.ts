@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
@@ -404,7 +405,36 @@ test("D-006 settleFailure F1-F3 do not persist; F4 is durable while the caller f
   }
 });
 
-test("test hooks reject in a fresh process without DURABLEQ_ENABLE_TEST_HOOKS", async () => {
+test("INV-002 add Promise stays pending until COMMIT", async () => {
+  const tmp = tempDbPath();
+  const gateDir = join(tmp.dir, "gate");
+  mkdirSync(gateDir, { recursive: true });
+  const q = openQueue(tmp.path);
+  try {
+    await configureFault(q, { point: "enqueue:before-commit", action: "pause", gateDir });
+    let resolved = false;
+    const pending = q.add("n", { v: 1 }).then((result) => {
+      resolved = true;
+      return result;
+    });
+    await eventually(() => {
+      assert.equal(existsSync(join(gateDir, "paused")), true);
+    });
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(resolved, false, "add() resolved before COMMIT");
+    writeFileSync(join(gateDir, "resume"), "1");
+    const result = await pending;
+    assert.equal(resolved, true);
+    assert.equal(result.deduplicated, false);
+    assert.equal(await q.count(), 1);
+    assertDatabaseInvariants(tmp.path);
+  } finally {
+    await q.close();
+    tmp.cleanup();
+  }
+});
+
+test("production storage worker rejects test operations", async () => {
   const tmp = tempDbPath();
   const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
   try {

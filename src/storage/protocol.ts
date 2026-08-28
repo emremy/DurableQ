@@ -17,15 +17,11 @@ export type StorageOp =
   | "startLeaseTracking"
   | "stopLeaseTracking"
   | "nextWakeHint"
-  | "close"
-  | "test.configureFault"
-  | "test.setNow"
-  | "test.getNow"
-  | "test.tickLeases";
+  | "close";
 
 export type StorageRequest = {
   id: string;
-  op: StorageOp;
+  op: string;
   payload: unknown;
 };
 
@@ -131,11 +127,6 @@ export type TrackPayload = {
   leaseDurationMs: number;
   heartbeatIntervalMs: number;
   attemptDeadlineMs: number | null;
-};
-
-export type FaultSpec = {
-  point: string;
-  action: "throw" | "exit" | "hang" | "none";
 };
 
 export function isStorageRequest(value: unknown): value is StorageRequest {

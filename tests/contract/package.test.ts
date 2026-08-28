@@ -7,10 +7,12 @@ import { spawnSync } from "node:child_process";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
-test("public exports do not include test hooks", () => {
+test("public exports do not include test hooks or storage RPC", () => {
   const src = readFileSync(join(root, "src/index.ts"), "utf8");
   assert.equal(src.includes("test.configureFault"), false);
   assert.equal(src.includes("fault-hooks"), false);
+  const queueSrc = readFileSync(join(root, "src/queue.ts"), "utf8");
+  assert.equal(queueSrc.includes("async storage("), false);
 });
 
 test("npm pack dry-run succeeds", () => {

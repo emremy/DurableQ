@@ -4,7 +4,6 @@ import { systemClock } from "./clock.ts";
 import { encodeJson } from "./codec/json.ts";
 import { DurableQClosedError, DurableQValidationError } from "./errors.ts";
 import { jobRowToView } from "./job.ts";
-import type { StorageClient } from "./storage/client.ts";
 import { acquireRuntime, type RuntimeHandle } from "./storage/runtime-registry.ts";
 import type { JobRow } from "./storage/protocol.ts";
 import { assertName, normalizeAddOptions, normalizeQueueOptions } from "./validation.ts";
@@ -57,11 +56,6 @@ export class Queue<Jobs extends JobMap = JobMap> extends EventEmitter {
     }
     this.#runtime = await this.#opening;
     return this.#runtime;
-  }
-
-  async storage(): Promise<StorageClient> {
-    const rt = await this.#ensure();
-    return rt.client;
   }
 
   async add<K extends keyof Jobs & string>(

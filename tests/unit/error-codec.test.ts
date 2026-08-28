@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { serializeStoredError } from "../../src/codec/error.ts";
+import { serializeStoredError, storedErrorToJson } from "../../src/codec/error.ts";
 
 test("error truncation is deterministic", () => {
   const err = new Error("x".repeat(100_000));
@@ -18,4 +18,10 @@ test("bounded fields only", () => {
   assert.equal(stored.message, "msg");
   assert.equal(stored.code, "E");
   assert.equal("extra" in stored, false);
+});
+
+test("storedErrorToJson preserves StoredError name", () => {
+  const json = storedErrorToJson({ name: "LeaseExpiredError", message: "lease expired" });
+  assert.match(json, /LeaseExpiredError/);
+  assert.match(json, /lease expired/);
 });

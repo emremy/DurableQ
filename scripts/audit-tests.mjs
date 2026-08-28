@@ -20,7 +20,16 @@ function walk(dir) {
   /** @type {string[]} */
   const out = [];
   for (const name of readdirSync(dir)) {
-    if (name === "node_modules" || name === "dist" || name === ".git") continue;
+    if (
+      name === "node_modules" ||
+      name === "dist" ||
+      name === ".git" ||
+      name === ".stryker-tmp" ||
+      name === "reports" ||
+      name === "coverage"
+    ) {
+      continue;
+    }
     const p = join(dir, name);
     const st = statSync(p);
     if (st.isDirectory()) out.push(...walk(p));

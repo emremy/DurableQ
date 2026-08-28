@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { Queue } from "../../src/queue.ts";
+import { DurableQValidationError } from "../../src/errors.ts";
 import { acquireRuntime, registrySize } from "../../src/storage/runtime-registry.ts";
 import { assertDatabaseInvariants } from "../support/assert-db-invariants.ts";
+import { configureFault } from "../support/test-control.ts";
 import { openQueue } from "../support/open-queue.ts";
 import { tempDbPath } from "../support/temp-db.ts";
 
@@ -47,8 +49,7 @@ test("INV-017 storage worker exit rejects outstanding RPCs", async () => {
   const q = openQueue(tmp.path);
   try {
     await q.count();
-    const client = await q.storage();
-    await client.request("test.configureFault", { point: "enqueue:before-begin", action: "exit" });
+    await configureFault(q, { point: "enqueue:before-begin", action: "exit" });
     await assert.rejects(() => q.add("x", { a: 1 }), /storage worker/i);
   } finally {
     await q.close().catch(() => undefined);
@@ -58,7 +59,7 @@ test("INV-017 storage worker exit rejects outstanding RPCs", async () => {
 
 test("newer schema version is rejected", async () => {
   const tmp = tempDbPath();
-  const rt = await acquireRuntime({ path: tmp.path, busyTimeoutMs: 50, enableTestHooks: true });
+  const rt = await acquireRuntime({ path: tmp.path, busyTimeoutMs: 50 });
   await rt.unref();
   const db = new DatabaseSync(tmp.path);
   db.prepare("UPDATE _durableq_meta SET value = '99' WHERE key = 'schema_version'").run();
@@ -68,6 +69,21 @@ test("newer schema version is rejected", async () => {
     await assert.rejects(() => q.count(), /schema version/);
   } finally {
     await q.close().catch(() => undefined);
+    tmp.cleanup();
+  }
+});
+
+test("conflicting busyTimeoutMs on the same path is rejected", async () => {
+  const tmp = tempDbPath();
+  const q1 = new Queue("app", { path: tmp.path, busyTimeoutMs: 50 });
+  const q2 = new Queue("app", { path: tmp.path, busyTimeoutMs: 100 });
+  try {
+    await q1.count();
+    await assert.rejects(() => q2.count(), DurableQValidationError);
+    await assert.rejects(() => q2.count(), /busyTimeoutMs=50/);
+  } finally {
+    await q1.close();
+    await q2.close().catch(() => undefined);
     tmp.cleanup();
   }
 });
