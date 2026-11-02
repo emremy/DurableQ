@@ -1,0 +1,51 @@
+{
+  "environment": {
+    "node": "v24.20.0",
+    "platform": "darwin arm64",
+    "cpu": "Apple M1",
+    "cores": 8,
+    "memGb": 9,
+    "sqlite": "3.53.4",
+    "sqliteMode": "WAL, synchronous=FULL, busy_timeout=5000",
+    "src": "/Users/emre/Desktop/DurableQ/src",
+    "scale": 1
+  },
+  "statsAndList": {
+    "tableRows": 300000,
+    "countAllMs": {
+      "coldMs": 232.95,
+      "samples": 100,
+      "p50": 8.353,
+      "p95": 16.322,
+      "p99": 20.658
+    },
+    "countFailedMs": {
+      "coldMs": 16.725,
+      "samples": 100,
+      "p50": 0.537,
+      "p95": 0.625,
+      "p99": 2.594
+    },
+    "statsMs": {
+      "coldMs": 461.268,
+      "samples": 100,
+      "p50": 42.118,
+      "p95": 54.85,
+      "p99": 75.855
+    },
+    "listFailedPageMs": {
+      "coldMs": 3.044,
+      "samples": 100,
+      "p50": 0.351,
+      "p95": 0.548,
+      "p99": 1.456
+    },
+    "listAllPageMs": {
+      "coldMs": 1.47,
+      "samples": 100,
+      "p50": 0.631,
+      "p95": 0.716,
+      "p99": 0.736
+    }
+  }
+}

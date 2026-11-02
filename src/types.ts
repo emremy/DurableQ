@@ -17,11 +17,24 @@ export type JobDefinition = {
 
 export type JobMap = Record<string, JobDefinition>;
 
+export type RetentionRule = {
+  /** Delete jobs this long after they reached the status. */
+  ageMs: number;
+};
+
+export type RetentionOptions = {
+  completed?: RetentionRule;
+  failed?: RetentionRule;
+  cancelled?: RetentionRule;
+};
+
 export type QueueOptions = {
   path: string;
   busyTimeoutMs?: number;
   maxPayloadBytes?: number;
   maxResultBytes?: number;
+  /** Automatic cleanup of terminal jobs, run by this queue's workers. Disabled by default. */
+  retention?: RetentionOptions;
 };
 
 export type AddOptions = {
@@ -57,6 +70,8 @@ export type JobView<Name extends string = string, Data extends JsonValue = JsonV
   completedAt: number | null;
   failedAt: number | null;
   cancelledAt: number | null;
+  /** 0–100, reported by the current or last attempt; reset to 0 when an attempt starts. */
+  progress: number;
 };
 
 export type AddResult<Name extends string = string, Data extends JsonValue = JsonValue> = {
@@ -76,6 +91,11 @@ export type JobContext = {
   attempt: number;
   maxAttempts: number;
   workerId: string;
+  /**
+   * Durably records progress (an integer 0–100). Resolves after the value is committed;
+   * rejects with DurableQStaleLeaseError if this attempt no longer owns the job.
+   */
+  updateProgress(progress: number): Promise<void>;
 };
 
 export type JobHandler<Input extends JsonValue, Output extends JsonValue> = (
@@ -105,6 +125,74 @@ export type CleanOptions = {
   before: number;
 };
 
+export type AddManyItem<Jobs extends JobMap = JobMap> = {
+  [K in keyof Jobs & string]: { name: K; data: Jobs[K]["input"]; options?: AddOptions };
+}[keyof Jobs & string];
+
+export type ScheduleOptions<Data extends JsonValue = JsonValue> = {
+  /** Stable identifier, unique within the queue. */
+  id: string;
+  /** Fixed interval between occurrences, in milliseconds (>= 1000). */
+  everyMs: number;
+  data: Data;
+  attempts?: number;
+  priority?: number;
+  attemptTimeoutMs?: number;
+  backoff?: BackoffConfig;
+};
+
+export type ScheduleView<Name extends string = string, Data extends JsonValue = JsonValue> = {
+  id: string;
+  queue: string;
+  name: Name;
+  data: Data;
+  everyMs: number;
+  nextRunAt: number;
+  attempts: number;
+  priority: number;
+  attemptTimeoutMs: number | null;
+  backoff: BackoffConfig;
+  lastJobId: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type ScheduleResult<Name extends string = string, Data extends JsonValue = JsonValue> = {
+  schedule: ScheduleView<Name, Data>;
+  outcome: "created" | "updated" | "unchanged";
+};
+
+export type QueueStats = {
+  queued: number;
+  active: number;
+  completed: number;
+  failed: number;
+  cancelled: number;
+  /** Queued jobs whose availableAt has passed (subset of queued). */
+  due: number;
+  /** Queued jobs whose availableAt is in the future (subset of queued; due + delayed = queued). */
+  delayed: number;
+  /** Queued jobs waiting for another attempt after a failure (subset of queued). */
+  retrying: number;
+  /** Milliseconds since the oldest due job became available; null when nothing is due. */
+  oldestQueuedAgeMs: number | null;
+  paused: boolean;
+};
+
+export type ListOptions = {
+  status?: JobStatus;
+  name?: string;
+  /** Default 50, maximum 1000. */
+  limit?: number;
+  /** nextCursor from a previous page. */
+  cursor?: string;
+};
+
+export type ListResult = {
+  jobs: JobView[];
+  nextCursor: string | null;
+};
+
 export type CountFilter = {
   status?: JobStatus;
 };
@@ -114,6 +202,7 @@ export type NormalizedQueueOptions = {
   busyTimeoutMs: number;
   maxPayloadBytes: number;
   maxResultBytes: number;
+  retention: { status: "completed" | "failed" | "cancelled"; ageMs: number }[];
 };
 
 export type NormalizedAddOptions = {

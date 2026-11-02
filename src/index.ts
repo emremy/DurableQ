@@ -15,6 +15,7 @@ export {
   LeaseExpiredError,
 } from "./errors.ts";
 export type {
+  AddManyItem,
   AddOptions,
   AddResult,
   BackoffConfig,
@@ -26,8 +27,16 @@ export type {
   JobStatus,
   JobView,
   JsonValue,
+  ListOptions,
+  ListResult,
   QueueOptions,
+  QueueStats,
+  RetentionOptions,
+  RetentionRule,
   RetryResult,
+  ScheduleOptions,
+  ScheduleResult,
+  ScheduleView,
   StoredError,
   WorkerOptions,
 } from "./types.ts";

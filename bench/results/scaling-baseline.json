@@ -1,0 +1,429 @@
+{
+  "environment": {
+    "node": "v24.20.0",
+    "cpu": "Apple M1",
+    "cores": 8,
+    "src": "/private/tmp/claude-501/-Users-emre-Desktop-DurableQ/5afd540a-b277-4b46-94ab-e41afa1d0a69/scratchpad/baseline-src",
+    "jobs": 20000,
+    "repeat": 1
+  },
+  "results": [
+    {
+      "scenario": "1x8",
+      "medianJobsPerSec": 71,
+      "minJobsPerSec": 71,
+      "maxJobsPerSec": 71,
+      "allValid": true,
+      "runs": [
+        {
+          "processes": 1,
+          "concurrencyPerProcess": 8,
+          "totalConcurrency": 8,
+          "jobs": 20000,
+          "valid": true,
+          "jobsPerSec": 71,
+          "wallMs": 280087,
+          "finalStatus": {
+            "completed": 20000
+          },
+          "attemptOutcomes": {
+            "completed": 20000
+          },
+          "handlerExecutions": 20000,
+          "duplicateExecutions": 0,
+          "claimCalls": 20007,
+          "emptyClaims": 7,
+          "workerErrors": {},
+          "storageErrorsByOp": {},
+          "worstProcessP95Ms": {
+            "init.p95": 0.943,
+            "count.p95": 0.582,
+            "claim.p95": 27.738,
+            "startLeaseTracking.p95": 0.003,
+            "settleSuccess.p95": 0.315,
+            "stopLeaseTracking.p95": 0.002,
+            "claim.lockWait.p95": 0.007,
+            "claim.body.p95": 27.447,
+            "settleSuccess.lockWait.p95": 0.009,
+            "settleSuccess.body.p95": 0.1
+          },
+          "cpuMs": 254367,
+          "dbBytes": 21659648,
+          "walBytes": 0
+        }
+      ]
+    },
+    {
+      "scenario": "2x4",
+      "medianJobsPerSec": 79,
+      "minJobsPerSec": 79,
+      "maxJobsPerSec": 79,
+      "allValid": true,
+      "runs": [
+        {
+          "processes": 2,
+          "concurrencyPerProcess": 4,
+          "totalConcurrency": 8,
+          "jobs": 20000,
+          "valid": true,
+          "jobsPerSec": 79,
+          "wallMs": 253521,
+          "finalStatus": {
+            "completed": 20000
+          },
+          "attemptOutcomes": {
+            "completed": 20000,
+            "failed_retrying": 9,
+            "lease_expired": 1
+          },
+          "handlerExecutions": 20010,
+          "duplicateExecutions": 10,
+          "claimCalls": 20046,
+          "emptyClaims": 36,
+          "workerErrors": {
+            "DurableQBusyError:BUSY": 17
+          },
+          "storageErrorsByOp": {
+            "claim": {
+              "BUSY/sqlite:5": 16
+            },
+            "settleSuccess": {
+              "BUSY/sqlite:5": 10
+            },
+            "settleFailure": {
+              "BUSY/sqlite:5": 1
+            }
+          },
+          "worstProcessP95Ms": {
+            "init.p95": 1.071,
+            "count.p95": 0.579,
+            "claim.p95": 28.129,
+            "startLeaseTracking.p95": 0.003,
+            "settleSuccess.p95": 0.275,
+            "stopLeaseTracking.p95": 0.003,
+            "settleFailure.p95": 5210.929,
+            "claim.lockWait.p95": 0.006,
+            "claim.body.p95": 27.457,
+            "settleSuccess.lockWait.p95": 0.009,
+            "settleSuccess.body.p95": 0.093,
+            "settleFailure.lockWait.p95": 3676.788,
+            "settleFailure.body.p95": 2.816
+          },
+          "cpuMs": 235876,
+          "dbBytes": 21712896,
+          "walBytes": 0
+        }
+      ]
+    },
+    {
+      "scenario": "4x2",
+      "medianJobsPerSec": 78,
+      "minJobsPerSec": 78,
+      "maxJobsPerSec": 78,
+      "allValid": true,
+      "runs": [
+        {
+          "processes": 4,
+          "concurrencyPerProcess": 2,
+          "totalConcurrency": 8,
+          "jobs": 20000,
+          "valid": true,
+          "jobsPerSec": 78,
+          "wallMs": 257033,
+          "finalStatus": {
+            "completed": 20000
+          },
+          "attemptOutcomes": {
+            "completed": 20000,
+            "failed_retrying": 24,
+            "lease_expired": 4
+          },
+          "handlerExecutions": 20028,
+          "duplicateExecutions": 28,
+          "claimCalls": 20110,
+          "emptyClaims": 82,
+          "workerErrors": {
+            "DurableQBusyError:BUSY": 35
+          },
+          "storageErrorsByOp": {
+            "claim": {
+              "BUSY/sqlite:5": 31
+            },
+            "settleSuccess": {
+              "BUSY/sqlite:5": 28
+            },
+            "settleFailure": {
+              "BUSY/sqlite:5": 4
+            }
+          },
+          "worstProcessP95Ms": {
+            "init.p95": 3.49,
+            "count.p95": 0.608,
+            "claim.p95": 28.588,
+            "startLeaseTracking.p95": 0.004,
+            "settleSuccess.p95": 0.356,
+            "stopLeaseTracking.p95": 0.004,
+            "settleFailure.p95": 5214.818,
+            "claim.lockWait.p95": 0.011,
+            "claim.body.p95": 25.981,
+            "settleSuccess.lockWait.p95": 0.01,
+            "settleSuccess.body.p95": 0.119,
+            "settleFailure.lockWait.p95": 4502.365,
+            "settleFailure.body.p95": 5.358
+          },
+          "cpuMs": 245355,
+          "dbBytes": 21782528,
+          "walBytes": 0
+        }
+      ]
+    },
+    {
+      "scenario": "8x1",
+      "medianJobsPerSec": 69,
+      "minJobsPerSec": 69,
+      "maxJobsPerSec": 69,
+      "allValid": true,
+      "runs": [
+        {
+          "processes": 8,
+          "concurrencyPerProcess": 1,
+          "totalConcurrency": 8,
+          "jobs": 20000,
+          "valid": true,
+          "jobsPerSec": 69,
+          "wallMs": 291149,
+          "finalStatus": {
+            "completed": 20000
+          },
+          "attemptOutcomes": {
+            "completed": 20000,
+            "failed_retrying": 33,
+            "lease_expired": 3
+          },
+          "handlerExecutions": 20036,
+          "duplicateExecutions": 36,
+          "claimCalls": 20134,
+          "emptyClaims": 98,
+          "workerErrors": {
+            "DurableQBusyError:BUSY": 36
+          },
+          "storageErrorsByOp": {
+            "claim": {
+              "BUSY/sqlite:5": 33
+            },
+            "settleSuccess": {
+              "BUSY/sqlite:5": 36
+            },
+            "settleFailure": {
+              "BUSY/sqlite:5": 3
+            }
+          },
+          "worstProcessP95Ms": {
+            "init.p95": 3.131,
+            "count.p95": 0.771,
+            "claim.p95": 51.984,
+            "startLeaseTracking.p95": 0.008,
+            "settleSuccess.p95": 145.996,
+            "stopLeaseTracking.p95": 0.002,
+            "settleFailure.p95": 5234.094,
+            "claim.lockWait.p95": 3.314,
+            "claim.body.p95": 32.829,
+            "settleSuccess.lockWait.p95": 119.953,
+            "settleSuccess.body.p95": 0.197,
+            "settleFailure.lockWait.p95": 4566.502,
+            "settleFailure.body.p95": 4.268
+          },
+          "cpuMs": 277829,
+          "dbBytes": 21839872,
+          "walBytes": 0
+        }
+      ]
+    },
+    {
+      "scenario": "2x8",
+      "medianJobsPerSec": 77,
+      "minJobsPerSec": 77,
+      "maxJobsPerSec": 77,
+      "allValid": true,
+      "runs": [
+        {
+          "processes": 2,
+          "concurrencyPerProcess": 8,
+          "totalConcurrency": 16,
+          "jobs": 20000,
+          "valid": true,
+          "jobsPerSec": 77,
+          "wallMs": 259678,
+          "finalStatus": {
+            "completed": 20000
+          },
+          "attemptOutcomes": {
+            "completed": 20000,
+            "failed_retrying": 9,
+            "lease_expired": 2
+          },
+          "handlerExecutions": 20011,
+          "duplicateExecutions": 11,
+          "claimCalls": 20040,
+          "emptyClaims": 29,
+          "workerErrors": {
+            "DurableQBusyError:BUSY": 18
+          },
+          "storageErrorsByOp": {
+            "claim": {
+              "BUSY/sqlite:5": 16
+            },
+            "settleSuccess": {
+              "BUSY/sqlite:5": 11
+            },
+            "settleFailure": {
+              "BUSY/sqlite:5": 2
+            }
+          },
+          "worstProcessP95Ms": {
+            "init.p95": 1.116,
+            "count.p95": 0.683,
+            "claim.p95": 26.784,
+            "startLeaseTracking.p95": 0.003,
+            "settleSuccess.p95": 0.313,
+            "stopLeaseTracking.p95": 0.003,
+            "settleFailure.p95": 5228.382,
+            "claim.lockWait.p95": 0.006,
+            "claim.body.p95": 26.312,
+            "settleSuccess.lockWait.p95": 0.01,
+            "settleSuccess.body.p95": 0.098,
+            "settleFailure.lockWait.p95": 4638.368,
+            "settleFailure.body.p95": 6.414
+          },
+          "cpuMs": 240479,
+          "dbBytes": 21741568,
+          "walBytes": 0
+        }
+      ]
+    },
+    {
+      "scenario": "4x8",
+      "medianJobsPerSec": 71,
+      "minJobsPerSec": 71,
+      "maxJobsPerSec": 71,
+      "allValid": true,
+      "runs": [
+        {
+          "processes": 4,
+          "concurrencyPerProcess": 8,
+          "totalConcurrency": 32,
+          "jobs": 20000,
+          "valid": true,
+          "jobsPerSec": 71,
+          "wallMs": 281427,
+          "finalStatus": {
+            "completed": 20000
+          },
+          "attemptOutcomes": {
+            "completed": 20000,
+            "failed_retrying": 36,
+            "lease_expired": 5
+          },
+          "handlerExecutions": 20041,
+          "duplicateExecutions": 41,
+          "claimCalls": 20146,
+          "emptyClaims": 105,
+          "workerErrors": {
+            "DurableQBusyError:BUSY": 54
+          },
+          "storageErrorsByOp": {
+            "claim": {
+              "BUSY/sqlite:5": 49
+            },
+            "settleSuccess": {
+              "BUSY/sqlite:5": 41
+            },
+            "settleFailure": {
+              "BUSY/sqlite:5": 5
+            }
+          },
+          "worstProcessP95Ms": {
+            "init.p95": 1.556,
+            "count.p95": 0.599,
+            "claim.p95": 36.123,
+            "startLeaseTracking.p95": 0.004,
+            "settleSuccess.p95": 0.448,
+            "stopLeaseTracking.p95": 0.005,
+            "settleFailure.p95": 5293.34,
+            "claim.lockWait.p95": 0.008,
+            "claim.body.p95": 33.261,
+            "settleSuccess.lockWait.p95": 0.011,
+            "settleSuccess.body.p95": 0.131,
+            "settleFailure.lockWait.p95": 4948.572,
+            "settleFailure.body.p95": 7.407
+          },
+          "cpuMs": 254070,
+          "dbBytes": 21954560,
+          "walBytes": 0
+        }
+      ]
+    },
+    {
+      "scenario": "8x8",
+      "medianJobsPerSec": 85,
+      "minJobsPerSec": 85,
+      "maxJobsPerSec": 85,
+      "allValid": true,
+      "runs": [
+        {
+          "processes": 8,
+          "concurrencyPerProcess": 8,
+          "totalConcurrency": 64,
+          "jobs": 20000,
+          "valid": true,
+          "jobsPerSec": 85,
+          "wallMs": 235571,
+          "finalStatus": {
+            "completed": 20000
+          },
+          "attemptOutcomes": {
+            "completed": 20000,
+            "failed_retrying": 68,
+            "lease_expired": 9
+          },
+          "handlerExecutions": 20077,
+          "duplicateExecutions": 77,
+          "claimCalls": 20357,
+          "emptyClaims": 280,
+          "workerErrors": {
+            "DurableQBusyError:BUSY": 126
+          },
+          "storageErrorsByOp": {
+            "claim": {
+              "BUSY/sqlite:5": 117
+            },
+            "settleSuccess": {
+              "BUSY/sqlite:5": 77
+            },
+            "settleFailure": {
+              "BUSY/sqlite:5": 9
+            }
+          },
+          "worstProcessP95Ms": {
+            "init.p95": 6.621,
+            "count.p95": 0.61,
+            "claim.p95": 24.726,
+            "startLeaseTracking.p95": 0.003,
+            "settleSuccess.p95": 0.31,
+            "stopLeaseTracking.p95": 0.004,
+            "settleFailure.p95": 5219.785,
+            "claim.lockWait.p95": 0.006,
+            "claim.body.p95": 23.454,
+            "settleSuccess.lockWait.p95": 0.01,
+            "settleSuccess.body.p95": 0.087,
+            "settleFailure.lockWait.p95": 5207.476,
+            "settleFailure.body.p95": 6.757
+          },
+          "cpuMs": 228103,
+          "dbBytes": 22052864,
+          "walBytes": 0
+        }
+      ]
+    }
+  ]
+}

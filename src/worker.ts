@@ -1,14 +1,25 @@
 import { EventEmitter } from "node:events";
 import { encodeJson } from "./codec/json.ts";
 import { serializeStoredError } from "./codec/error.ts";
-import { DurableQClosedError, DurableQSerializationError, NonRetryableError } from "./errors.ts";
+import {
+  RETENTION_INTERVAL_MS,
+  SETTLE_BUSY_ATTEMPTS,
+  SETTLE_BUSY_BASE_DELAY_MS,
+  SETTLE_BUSY_MAX_DELAY_MS,
+} from "./constants.ts";
+import {
+  DurableQBusyError,
+  DurableQClosedError,
+  DurableQSerializationError,
+  NonRetryableError,
+} from "./errors.ts";
 import { newWorkerId } from "./ids.ts";
 import { jobRowToView } from "./job.ts";
 import type { Queue } from "./queue.ts";
 import type { StorageClient } from "./storage/client.ts";
 import { acquireRuntime, type RuntimeHandle } from "./storage/runtime-registry.ts";
 import type { JobRow } from "./storage/protocol.ts";
-import { assertJobNameList, normalizeWorkerOptions } from "./validation.ts";
+import { assertJobNameList, assertSafeInteger, normalizeWorkerOptions } from "./validation.ts";
 import type {
   JobContext,
   JobHandler,
@@ -43,6 +54,7 @@ export class Worker<Jobs extends JobMap = JobMap> extends EventEmitter {
   #wake: (() => void) | undefined;
   #active = new Map<string, ActiveAttempt>();
   #storageHandle: RuntimeHandle | undefined;
+  #nextRetentionAt = 0;
 
   constructor(queue: Queue<Jobs>, handlers: Handlers<Jobs>, options?: WorkerOptions) {
     super();
@@ -167,6 +179,7 @@ export class Worker<Jobs extends JobMap = JobMap> extends EventEmitter {
           await this.#sleep(this.options.pollIntervalMs);
           continue;
         }
+        await this.#maybeApplyRetention(client);
         while (!this.#stopping && this.#active.size < this.options.concurrency) {
           const row = await client.request<JobRow | null>("claim", {
             nowMs: this.queue.clock.now(),
@@ -184,6 +197,24 @@ export class Worker<Jobs extends JobMap = JobMap> extends EventEmitter {
         continue;
       }
       await this.#sleep(this.options.pollIntervalMs);
+    }
+  }
+
+  async #maybeApplyRetention(client: StorageClient): Promise<void> {
+    const rules = this.queue.options.retention;
+    const nowMs = this.queue.clock.now();
+    if (rules.length === 0 || nowMs < this.#nextRetentionAt) return;
+    // Local throttle; the database slot coordinates processes sharing the queue.
+    this.#nextRetentionAt = nowMs + RETENTION_INTERVAL_MS;
+    try {
+      const deleted = await client.request<number>("applyRetention", {
+        nowMs,
+        queue: this.queue.name,
+        rules,
+      });
+      if (deleted > 0) this.#emit("retention", { deleted });
+    } catch (err) {
+      this.#emit("error", err);
     }
   }
 
@@ -219,6 +250,16 @@ export class Worker<Jobs extends JobMap = JobMap> extends EventEmitter {
       attempt: row.attempt_count,
       maxAttempts: row.max_attempts,
       workerId: this.workerId,
+      updateProgress: async (progress: number) => {
+        assertSafeInteger(progress, "progress", 0, 100);
+        await client.request("updateProgress", {
+          nowMs: this.queue.clock.now(),
+          id: row.id,
+          workerId: this.workerId,
+          generation: row.lease_generation,
+          progress,
+        });
+      },
     };
     this.#emit("active", job);
     await client.request("startLeaseTracking", {
@@ -235,7 +276,17 @@ export class Worker<Jobs extends JobMap = JobMap> extends EventEmitter {
       return;
     }
     try {
-      const output = await handler(job, ctx);
+      let output: JsonValue;
+      try {
+        output = await handler(job, ctx);
+      } catch (err) {
+        if (abort.signal.aborted) {
+          this.#emit("leaseLost", { jobId: row.id, generation: row.lease_generation });
+          return;
+        }
+        await this.#fail(row, err, err instanceof NonRetryableError);
+        return;
+      }
       if (abort.signal.aborted) {
         this.#emit("leaseLost", { jobId: row.id, generation: row.lease_generation });
         return;
@@ -251,21 +302,21 @@ export class Worker<Jobs extends JobMap = JobMap> extends EventEmitter {
         await this.#fail(row, ser, true);
         return;
       }
-      await client.request("settleSuccess", {
-        nowMs: this.queue.clock.now(),
-        id: row.id,
-        workerId: this.workerId,
-        generation: row.lease_generation,
-        resultJson,
-      });
-      this.#emit("completed", { ...job, status: "completed" as const });
-    } catch (err) {
-      if (abort.signal.aborted) {
-        this.#emit("leaseLost", { jobId: row.id, generation: row.lease_generation });
+      try {
+        await this.#settle("settleSuccess", () => ({
+          nowMs: this.queue.clock.now(),
+          id: row.id,
+          workerId: this.workerId,
+          generation: row.lease_generation,
+          resultJson,
+        }));
+      } catch (err) {
+        // A storage failure is not a handler failure: the job stays active and is recovered
+        // (and re-run, at-least-once) when its lease expires.
+        this.#emit("error", err);
         return;
       }
-      const nonRetryable = err instanceof NonRetryableError;
-      await this.#fail(row, err, nonRetryable);
+      this.#emit("completed", { ...job, status: "completed" as const });
     } finally {
       await client
         .request("stopLeaseTracking", { jobId: row.id, generation: row.lease_generation })
@@ -273,17 +324,35 @@ export class Worker<Jobs extends JobMap = JobMap> extends EventEmitter {
     }
   }
 
-  async #fail(row: JobRow, err: unknown, nonRetryable: boolean): Promise<void> {
+  /**
+   * Settles with bounded, jittered retries on SQLITE_BUSY. A BUSY write transaction never
+   * committed (it failed at BEGIN IMMEDIATE or was rolled back), and lease fencing rejects a
+   * retry that is no longer valid, so retrying cannot double-settle.
+   */
+  async #settle<T>(op: "settleSuccess" | "settleFailure", payload: () => object): Promise<T> {
     const client = this.#client();
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await client.request<T>(op, payload());
+      } catch (err) {
+        if (!(err instanceof DurableQBusyError) || attempt >= SETTLE_BUSY_ATTEMPTS) throw err;
+        const capMs = Math.min(SETTLE_BUSY_MAX_DELAY_MS, SETTLE_BUSY_BASE_DELAY_MS * 2 ** attempt);
+        await new Promise((r) => setTimeout(r, Math.random() * capMs));
+      }
+    }
+  }
+
+  async #fail(row: JobRow, err: unknown, nonRetryable: boolean): Promise<void> {
     try {
-      const settled = await client.request<JobRow>("settleFailure", {
+      const error = serializeStoredError(err);
+      const settled = await this.#settle<JobRow>("settleFailure", () => ({
         nowMs: this.queue.clock.now(),
         id: row.id,
         workerId: this.workerId,
         generation: row.lease_generation,
-        error: serializeStoredError(err),
+        error,
         nonRetryable,
-      });
+      }));
       if (settled.status === "queued") this.#emit("retrying", jobRowToView(settled));
       else this.#emit("failed", jobRowToView(settled));
     } catch (settleErr) {

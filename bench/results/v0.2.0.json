@@ -1,0 +1,133 @@
+{
+  "environment": {
+    "node": "v24.20.0",
+    "platform": "darwin arm64",
+    "cpu": "Apple M1",
+    "cores": 8,
+    "memGb": 9,
+    "sqlite": "3.53.4",
+    "sqliteMode": "WAL, synchronous=FULL, busy_timeout=5000",
+    "src": "/Users/emre/Desktop/DurableQ/src",
+    "scale": 1
+  },
+  "enqueueSingle": {
+    "jobs": 2000,
+    "jobsPerSec": 8186,
+    "latencyMs": {
+      "p50": 0.103,
+      "p95": 0.179,
+      "p99": 0.559
+    },
+    "cpuMs": 213,
+    "peakRssMb": 131,
+    "dbBytesPerJob": 934
+  },
+  "enqueueBulk": {
+    "jobs": 50000,
+    "batchSize": 1000,
+    "jobsPerSec": 26534,
+    "cpuMs": 1655,
+    "peakRssMb": 178,
+    "dbBytesPerJob": 902
+  },
+  "workerSingleProcess": {
+    "jobs": 5000,
+    "concurrency": 8,
+    "jobsPerSec": 2296,
+    "cpuMs": 1799,
+    "peakRssMb": 163,
+    "errors": 0
+  },
+  "workerFourProcesses": {
+    "jobs": 20000,
+    "processes": 4,
+    "concurrencyPerProcess": 8,
+    "jobsPerSec": 2425,
+    "workerErrors": 0
+  },
+  "claimLatencyNoSchedules": {
+    "tableRows": 102000,
+    "schedules": 0,
+    "claimLatencyMs": {
+      "p50": 0.15,
+      "p95": 0.206,
+      "p99": 1.363
+    }
+  },
+  "claimLatency50FutureSchedules": {
+    "tableRows": 102000,
+    "schedules": 50,
+    "claimLatencyMs": {
+      "p50": 0.149,
+      "p95": 0.189,
+      "p99": 0.842
+    }
+  },
+  "statsAndList": {
+    "tableRows": 300000,
+    "countAllMs": {
+      "p50": 9.745,
+      "p95": 270.204,
+      "p99": 270.204
+    },
+    "countFailedMs": {
+      "p50": 0.577,
+      "p95": 18.813,
+      "p99": 18.813
+    },
+    "statsMs": {
+      "p50": 45.386,
+      "p95": 234.893,
+      "p99": 234.893
+    },
+    "listFailedPageMs": {
+      "p50": 0.418,
+      "p95": 4.65,
+      "p99": 4.65
+    },
+    "listAllPageMs": {
+      "p50": 0.756,
+      "p95": 1.553,
+      "p99": 1.553
+    }
+  },
+  "progressUpdates": {
+    "jobs": 2000,
+    "updatesPerJob": 4,
+    "jobsPerSec": 1858,
+    "updateLatencyMs": {
+      "p50": 0.432,
+      "p95": 0.715,
+      "p99": 1.752
+    },
+    "cpuMs": 959
+  },
+  "scheduling": {
+    "schedules": 200,
+    "claimWithFiftyDueMs": {
+      "p50": 0.071,
+      "p95": 1.215,
+      "p99": 1.215
+    },
+    "occurrencesCreated": 200
+  },
+  "retentionCleanup": {
+    "deleted": 50000,
+    "runs": 5,
+    "deletedPerSec": 31985,
+    "perRunMs": {
+      "p50": 367.825,
+      "p95": 378.321,
+      "p99": 378.321
+    },
+    "cpuMs": 1021,
+    "filesBefore": {
+      "mainBytes": 45330432,
+      "walBytes": 45637272
+    },
+    "filesAfter": {
+      "mainBytes": 45330432,
+      "walBytes": 0
+    }
+  }
+}

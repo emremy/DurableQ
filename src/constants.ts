@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const DEFAULT_BUSY_TIMEOUT_MS = 5_000;
 export const DEFAULT_MAX_PAYLOAD_BYTES = 1024 * 1024;
@@ -20,6 +20,18 @@ export const MIN_CONCURRENCY = 1;
 export const MAX_CONCURRENCY = 256;
 export const RECOVERY_BATCH_SIZE = 50;
 export const LEASE_TICK_MS = 50;
+export const MAX_BATCH_SIZE = 1_000;
+export const MIN_SCHEDULE_INTERVAL_MS = 1_000;
+export const MAX_SCHEDULE_INTERVAL_MS = 366 * 24 * 60 * 60 * 1000;
+export const SCHEDULE_BATCH_SIZE = 50;
+export const DEFAULT_LIST_LIMIT = 50;
+export const MAX_LIST_LIMIT = 1_000;
+export const RETENTION_INTERVAL_MS = 60_000;
+export const RETENTION_BATCH_SIZE = 500;
+export const RETENTION_MAX_BATCHES = 20;
+export const SETTLE_BUSY_ATTEMPTS = 5;
+export const SETTLE_BUSY_BASE_DELAY_MS = 25;
+export const SETTLE_BUSY_MAX_DELAY_MS = 1_000;
 
 export const JOB_STATUSES = ["queued", "active", "completed", "failed", "cancelled"] as const;
 

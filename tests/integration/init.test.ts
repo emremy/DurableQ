@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { Queue } from "../../src/queue.ts";
+import { SCHEMA_VERSION } from "../../src/constants.ts";
 import { DurableQValidationError } from "../../src/errors.ts";
 import { acquireRuntime, registrySize } from "../../src/storage/runtime-registry.ts";
 import { assertDatabaseInvariants } from "../support/assert-db-invariants.ts";
@@ -32,7 +33,7 @@ test("INV-016/INV-020/INV-021 init WAL FULL and shared runtime", async () => {
         .get() as {
         value: string;
       };
-      assert.equal(ver.value, "1");
+      assert.equal(ver.value, String(SCHEMA_VERSION));
     } finally {
       db.close();
     }

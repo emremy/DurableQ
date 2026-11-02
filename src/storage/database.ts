@@ -38,8 +38,13 @@ export function openDatabase(filePath: string, busyTimeoutMs: number): DatabaseS
   return db;
 }
 
-export function transact<T>(db: DatabaseSync, fn: () => T): T {
-  db.exec("BEGIN IMMEDIATE");
+/** Writes take the lock up front (IMMEDIATE); plain BEGIN gives reads a consistent WAL snapshot. */
+export function transact<T>(
+  db: DatabaseSync,
+  fn: () => T,
+  begin: "BEGIN IMMEDIATE" | "BEGIN" = "BEGIN IMMEDIATE",
+): T {
+  db.exec(begin);
   try {
     const result = fn();
     db.exec("COMMIT");

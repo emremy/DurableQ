@@ -1,6 +1,6 @@
 {
   "name": "durableq",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Durable background jobs for Node.js, powered only by built-in SQLite. No Redis. No native dependencies. No infrastructure.",
   "type": "module",
   "engines": {
@@ -17,6 +17,7 @@
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE",
     "SECURITY.md"
   ],
@@ -43,6 +44,7 @@
     "test:coverage": "node --test --experimental-test-coverage --test-coverage-exclude=**/tests/** --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85 tests/unit/**/*.test.ts tests/integration/**/*.test.ts tests/property/**/*.test.ts tests/model/**/*.test.ts",
     "test:mutation": "stryker run",
     "test:mutation:ops": "stryker run stryker.ops.config.json",
+    "bench": "node bench/benchmark.ts",
     "audit:tests": "node scripts/audit-tests.mjs",
     "audit:package": "node scripts/inspect-package.mjs",
     "audit:all": "npm run audit:tests && npm audit --omit=dev && npm run audit:package",

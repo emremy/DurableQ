@@ -1,0 +1,67 @@
+{
+  "environment": {
+    "node": "v24.20.0",
+    "platform": "darwin arm64",
+    "cpu": "Apple M1",
+    "cores": 8,
+    "memGb": 9,
+    "sqlite": "3.53.4",
+    "sqliteMode": "WAL, synchronous=FULL, busy_timeout=5000",
+    "src": "/private/tmp/claude-501/-Users-emre-Desktop-DurableQ/5afd540a-b277-4b46-94ab-e41afa1d0a69/scratchpad/v010/src",
+    "scale": 1
+  },
+  "enqueueSingle": {
+    "jobs": 2000,
+    "jobsPerSec": 5732,
+    "latencyMs": {
+      "p50": 0.154,
+      "p95": 0.212,
+      "p99": 0.539
+    },
+    "cpuMs": 332,
+    "peakRssMb": 149,
+    "dbBytesPerJob": 852
+  },
+  "enqueueBulk": "n/a",
+  "workerSingleProcess": {
+    "jobs": 5000,
+    "concurrency": 8,
+    "jobsPerSec": 380,
+    "cpuMs": 13006,
+    "peakRssMb": 161,
+    "errors": 0
+  },
+  "workerFourProcesses": {
+    "jobs": 20000,
+    "processes": 4,
+    "concurrencyPerProcess": 8,
+    "jobsPerSec": 70,
+    "workerErrors": 48
+  },
+  "claimLatencyNoSchedules": {
+    "tableRows": 102000,
+    "schedules": 0,
+    "claimLatencyMs": {
+      "p50": 0.689,
+      "p95": 1.062,
+      "p99": 1.731
+    }
+  },
+  "claimLatency50FutureSchedules": "n/a",
+  "statsAndList": {
+    "tableRows": 300000,
+    "countAllMs": {
+      "p50": 11.849,
+      "p95": 304.462,
+      "p99": 304.462
+    },
+    "countFailedMs": {
+      "p50": 0.596,
+      "p95": 1.024,
+      "p99": 1.024
+    }
+  },
+  "progressUpdates": "n/a",
+  "scheduling": "n/a",
+  "retentionCleanup": "n/a"
+}

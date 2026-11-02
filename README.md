@@ -461,7 +461,10 @@ The key remains reserved for the **lifetime of the job row**, including when the
 - failed;
 - cancelled.
 
-Reuse becomes possible only after the owning row is removed with `clean()`.
+Reuse becomes possible only after the owning row is removed, either with `clean()` or by
+[automatic retention](#retention). If a retention rule deletes a completed job, a later
+`add()` with the same key creates a **new** job. Choose retention ages longer than the window
+in which a duplicate enqueue could still arrive.
 
 This behavior is intentional because it protects retries after an indeterminate enqueue response.
 
@@ -656,6 +659,27 @@ It does not make CPU-bound user handlers non-blocking. CPU-heavy handlers should
 
 ## Multiple processes
 
+### Performance and SQLite contention
+
+SQLite allows one writer at a time per database file. Every claim, completion, failure, heartbeat, and progress update is a short write transaction (a claim takes about 0.15–0.2 ms on an Apple M1), and all processes on the host take turns on that single write lock. Consequences, measured with `node bench/scaling.ts` (20,000 no-op jobs, three runs each, median):
+
+| Processes × concurrency | Total concurrency | Jobs/s |
+| ----------------------- | ----------------- | ------ |
+| 1 × 8                   | 8                 | 2,665  |
+| 2 × 4                   | 8                 | 2,583  |
+| 4 × 2                   | 8                 | 2,175  |
+| 8 × 1                   | 8                 | 1,619  |
+| 2 × 8                   | 16                | 2,073  |
+| 4 × 8                   | 32                | 2,411  |
+| 8 × 8                   | 64                | 2,113  |
+
+All 21 runs completed every job, with no worker errors, no `SQLITE_BUSY`, no lease expirations, and no duplicate executions.
+
+- **Adding processes does not add queue throughput.** Spread work across processes for CPU-heavy or isolated handlers, not to speed up the queue itself. With no-op handlers, one or two processes are fastest; eight single-concurrency processes lose about 40% to lock hand-offs.
+- **Handler time dominates in real workloads.** The numbers above are queue overhead. If a job takes 50 ms of I/O, `concurrency` is what matters; raise it before adding processes.
+- **`busyTimeoutMs` (default 5 s)** is how long one storage operation waits for the write lock before failing with `DurableQBusyError`. Completion and failure settlement retry such failures up to 5 times with jittered backoff before reporting them. A claim that fails is reported as a worker `error` event and simply retried on the next poll. If you see `DurableQBusyError` regularly, something is holding the write lock for long periods (for example another program writing to the file, or a manual `VACUUM`).
+- A completion that still cannot be stored is **not** recorded as a handler failure: the job stays `active`, an `error` event is emitted, and the job is recovered and re-run when its lease expires (at-least-once).
+
 Multiple Node.js processes on the **same machine** may share the same DurableQ database file.
 
 DurableQ uses SQLite transactions, job leases, and generation fencing to coordinate ownership.
@@ -702,11 +726,41 @@ For backups, use a SQLite-aware backup procedure rather than copying only the ma
 
 ---
 
+### Backups
+
+Back up with SQLite's online backup API, which produces a consistent snapshot while DurableQ keeps running:
+
+```ts
+import { DatabaseSync, backup } from "node:sqlite";
+
+const source = new DatabaseSync("./data/durableq.db");
+await backup(source, "./backups/durableq-2026-11-02.db");
+source.close();
+```
+
+or, from a shell, `sqlite3 ./data/durableq.db ".backup './backups/durableq.db'"`.
+
+Restore by stopping every process that uses the queue, replacing the database directory's contents with the backup, and starting again. Jobs that were `active` in the snapshot are recovered when their lease expires, so handlers must be idempotent (see [Delivery semantics](#delivery-semantics)).
+
+---
+
 ## Containers
 
 If DurableQ runs inside a container, the database must live on persistent **local** storage if jobs need to survive container replacement.
 
-An ephemeral container filesystem is not durable across container recreation.
+An ephemeral container filesystem is not durable across container recreation. Mount a volume for the database **directory** (not just the `.db` file, because of the `-wal` and `-shm` sidecars):
+
+```yaml
+services:
+  app:
+    image: my-app
+    volumes:
+      - durableq-data:/app/data # Queue path: /app/data/durableq.db
+volumes:
+  durableq-data:
+```
+
+Run every container that shares the queue on the same host and the same volume.
 
 At the same time, do not solve that by placing the database on NFS, EFS, or another network filesystem. DurableQ is designed for a local SQLite database on one host.
 
@@ -799,6 +853,29 @@ await queue.clean({
 
 Removing a job also releases its dedupe key.
 
+### `queue.addMany(items)`
+
+Adds up to 1,000 jobs in **one SQLite transaction**. See [Bulk enqueue](#bulk-enqueue).
+
+```ts
+const results = await queue.addMany([
+  { name: "email.send", data: { to: "a@example.com", subject: "Hi" } },
+  { name: "email.send", data: { to: "b@example.com", subject: "Hi" }, options: { priority: 5 } },
+]);
+```
+
+### `queue.schedule(name, options)`, `getSchedule(id)`, `listSchedules()`, `removeSchedule(id)`
+
+Durable fixed-interval recurring jobs. See [Recurring jobs](#recurring-jobs).
+
+### `queue.pause()`, `queue.resume()`, `queue.isPaused()`
+
+Persistent, cross-process pause. See [Pause and resume](#pause-and-resume).
+
+### `queue.stats()` and `queue.list(options?)`
+
+Read-only inspection. See [Inspecting the queue](#inspecting-the-queue).
+
 ### `queue.close()`
 
 Releases the queue's storage resources.
@@ -835,6 +912,15 @@ const worker = new Worker(
 
 A worker only claims job names for which it has a handler.
 
+Handlers receive `(job, ctx)`:
+
+| `ctx` member                 | Description                                                        |
+| ---------------------------- | ------------------------------------------------------------------ |
+| `signal`                     | Aborted on attempt timeout or lease loss.                          |
+| `attempt` / `maxAttempts`    | 1-based attempt number and the limit.                              |
+| `workerId`                   | The claiming worker's ID.                                          |
+| `updateProgress(n)` _(v0.2)_ | Durably records progress 0–100. See [Job progress](#job-progress). |
+
 ### `worker.start()`
 
 Starts processing jobs.
@@ -867,6 +953,7 @@ completed
 retrying
 failed
 leaseLost
+retention   // { deleted } after an automatic retention run removed jobs
 error
 ```
 
@@ -878,7 +965,7 @@ The SQLite job state is authoritative.
 
 ## Retention
 
-Completed, failed, and cancelled jobs remain in the database until explicitly cleaned.
+By default, completed, failed, and cancelled jobs remain in the database until explicitly cleaned.
 
 This is intentional.
 
@@ -889,9 +976,7 @@ It provides:
 - persistent deduplication;
 - predictable retention behavior.
 
-Applications should define an explicit retention policy.
-
-Example:
+Applications should define an explicit retention policy, either manually:
 
 ```ts
 await queue.clean({
@@ -899,6 +984,199 @@ await queue.clean({
   before: Date.now() - 30 * 24 * 60 * 60 * 1000,
 });
 ```
+
+or with **automatic retention** (v0.2, disabled unless configured):
+
+```ts
+const DAY = 24 * 60 * 60 * 1000;
+
+const queue = new Queue("app", {
+  path: "./data/durableq.db",
+  retention: {
+    completed: { ageMs: 7 * DAY },
+    failed: { ageMs: 30 * DAY },
+    cancelled: { ageMs: 7 * DAY },
+  },
+});
+```
+
+How automatic retention behaves:
+
+- It is run by the **workers** of that queue, at most once per minute per queue across all processes (coordinated through a row in the database, so processes do not all clean at once). A process that only enqueues never runs it.
+- A job is deleted once it has been in its terminal status for longer than `ageMs` (measured from `completedAt` / `failedAt` / `cancelledAt`). Omitted statuses are kept forever.
+- Only `completed`, `failed`, and `cancelled` jobs are ever deleted. `active` jobs and `queued` jobs (including jobs waiting for a retry) are never touched.
+- Deletion runs in short transactions of at most 500 jobs, and at most 10,000 jobs per status per run, so it never holds the write lock for long; other processes write between batches. A full run (10,000 deletions) keeps the running process's storage thread busy for roughly 0.3–0.5 s, during which that process's own claims and settlements wait. A large backlog is worked off over successive runs.
+- Retention deletes rows; it does not shrink the database file. Freed pages go to SQLite's free list and are reused by new jobs, so a queue with a steady retention window stops growing. DurableQ never runs `VACUUM` (it would hold the write lock for the whole rebuild). To return disk space to the OS after a one-off purge, stop the workers and run `sqlite3 ./data/durableq.db "VACUUM"`.
+- A crash mid-run loses nothing but time: each batch commits or rolls back on its own, and the next run continues.
+- Deleting a job releases its `dedupeKey` (see [Deduplication](#deduplication)) and its attempt history.
+- Recurring schedules are unaffected; their next occurrence does not depend on old jobs still existing.
+
+Each process applies the `retention` rules of its own `Queue` options, so give every process the same configuration.
+
+---
+
+## Bulk enqueue
+
+`addMany()` inserts up to 1,000 jobs in a single SQLite transaction and a single storage RPC:
+
+```ts
+const results = await queue.addMany([
+  { name: "email.send", data: { to: "a@example.com", subject: "Hi" } },
+  { name: "report.build", data: { reportId: 7 }, options: { delayMs: 60_000 } },
+]);
+
+results[0].job.id;
+results[0].deduplicated;
+```
+
+- **All or nothing.** Every item is validated and serialized before the transaction starts; any validation error rejects the whole call with nothing written. If the transaction itself fails (for example `SQLITE_BUSY` or a crash), no item is committed.
+- **Order.** Results are returned in input order.
+- **Deduplication** behaves exactly as for `add()`, item by item: an item whose `dedupeKey` already exists (including one inserted earlier in the same batch) returns the existing job with `deduplicated: true`; it is not an error.
+- **Limits.** At most 1,000 items per call; split larger inputs yourself. Each item's payload must fit `maxPayloadBytes`. An empty array resolves to `[]`.
+- **Typing.** Each item's `data` is checked against its `name`, just like `add()`.
+
+---
+
+## Recurring jobs
+
+```ts
+await queue.schedule("reports.generate", {
+  id: "daily-report",
+  everyMs: 24 * 60 * 60 * 1000,
+  data: { reportId: 123 },
+  // optional: attempts, priority, attemptTimeoutMs, backoff
+});
+
+await queue.getSchedule("daily-report"); // ScheduleView | null
+await queue.listSchedules(); // ScheduleView[]
+await queue.removeSchedule("daily-report"); // { removed: boolean }
+```
+
+Schedule definitions are stored in SQLite and survive restarts. There is no separate scheduler process: occurrences are created by **workers of the queue**, inside the same transaction that claims jobs.
+
+The model is **fixed-rate with coalesced catch-up**:
+
+- The first occurrence is due `everyMs` after the schedule is created; later ones follow a fixed grid (`created + k × everyMs`), regardless of how long each run takes.
+- When a worker polls and the schedule is due, exactly one job is enqueued for the **latest due slot**. Missed slots (downtime, a paused queue, no running worker) are **not** replayed one by one: after any outage there is at most one catch-up job.
+- While the previous occurrence is still `queued` or `active`, the slot is skipped, so a schedule never piles up more than one outstanding job.
+- Each occurrence carries the dedupe key `durableq:schedule:<id>:<slotMs>`. Together with the claim transaction this guarantees that two processes can never create the same occurrence.
+- Times come from the `Queue` clock of the process that materializes the occurrence (`Date.now()` by default). If the clock jumps backwards, the next occurrence is simply later; if it jumps forwards, one catch-up job is created.
+- `everyMs` must be an integer between 1,000 ms and 366 days. Cron expressions and time zones are not supported.
+
+Calling `schedule()` again with the same `id`:
+
+| Situation                                   | Result                                                                 |
+| ------------------------------------------- | ---------------------------------------------------------------------- |
+| Identical definition                        | `outcome: "unchanged"` — nothing is written.                           |
+| Different data/name/options, same `everyMs` | `outcome: "updated"` — the next occurrence time is kept.               |
+| Different `everyMs`                         | `outcome: "updated"` — the grid restarts: next run is `now + everyMs`. |
+
+The last declaration wins, so deploy the same definition to every process. `removeSchedule()` stops future occurrences; jobs it already created are left to run (cancel them with `cancel()` if needed).
+
+A paused queue creates no occurrences; after `resume()` a due schedule produces one catch-up job.
+
+---
+
+## Pause and resume
+
+```ts
+await queue.pause();
+await queue.isPaused(); // true, in every process using this database
+await queue.resume();
+```
+
+- The pause flag is stored in SQLite per queue name, survives restarts, and is checked inside the atomic claim transaction. Once `pause()` resolves, no process can claim a job from that queue.
+- Jobs that are already running are **not** interrupted: they keep heartbeating and can complete, fail, retry, or report progress.
+- `add()` and `addMany()` keep working while paused. Delayed jobs become claimable as soon as the queue is resumed and their time has come.
+- `pause()` and `resume()` are idempotent.
+- Lease recovery keeps running while paused, so jobs from crashed workers return to `queued`.
+
+---
+
+## Job progress
+
+```ts
+const worker = new Worker(queue, {
+  "reports.generate": async (job, ctx) => {
+    await ctx.updateProgress(10);
+    // ...
+    await ctx.updateProgress(100);
+    return { ok: true };
+  },
+});
+
+const job = await queue.get(jobId);
+job?.progress; // 0–100
+```
+
+- Progress is an integer from 0 to 100. Anything else rejects with `DurableQValidationError`.
+- `updateProgress()` resolves only after the value is committed to SQLite. It is fenced by the lease exactly like completion: if the attempt has lost its lease (expired, re-claimed by another worker, completed, cancelled), it rejects with `DurableQStaleLeaseError` and nothing is written.
+- Each call is one small, fsynced write transaction (sub-millisecond to a few milliseconds; see `bench/results`). Avoid reporting progress for every item of a hot loop; a few updates per job, or one every few seconds, is plenty. DurableQ deliberately does not buffer or coalesce updates, so a resolved call always means a committed, lease-checked value.
+- New jobs start at `0`. Every new attempt resets progress to `0` when it is claimed. Completed, failed, and cancelled jobs keep the last value reported.
+- A rejected progress update is just an error in your handler; it never changes how the job settles unless you let it escape the handler.
+
+---
+
+## Inspecting the queue
+
+```ts
+const stats = await queue.stats();
+// {
+//   queued: 150, active: 5, completed: 12000, failed: 3, cancelled: 1,
+//   due: 130, delayed: 20, retrying: 4,
+//   oldestQueuedAgeMs: 42000,
+//   paused: false,
+// }
+```
+
+- `queued`, `active`, `completed`, `failed`, `cancelled` are the persisted statuses.
+- `due`, `delayed`, and `retrying` are **subsets of `queued`**: `due + delayed = queued`, and `retrying` counts queued jobs that already failed at least once and are waiting for another attempt.
+- `failed` counts only terminally failed jobs.
+- `oldestQueuedAgeMs` is how long the oldest **due** job has been waiting since it became available (`null` if nothing is due) — a good lag alarm.
+- All values come from one consistent read snapshot and never block other processes. Counting is an index scan, so it grows with the number of rows in the queue: on a 300k-row table we measured p50 42 ms, p95 55 ms warm, and about 0.5 s for the first, cold call (see [Benchmarks](#benchmarks)). The call runs on the process's storage thread, so polling `stats()` many times per second from a worker process delays that process's job processing; every few seconds is fine.
+
+List jobs, newest first, with cursor pagination:
+
+```ts
+const page = await queue.list({ status: "failed", limit: 50 });
+for (const job of page.jobs) console.log(job.id, job.error?.message, job.attemptCount);
+
+if (page.nextCursor) {
+  const next = await queue.list({ status: "failed", limit: 50, cursor: page.nextCursor });
+}
+
+await queue.list({ name: "email.send", limit: 50 });
+```
+
+- Filters: `status`, `name`, both, or neither. `limit` defaults to 50, maximum 1,000.
+- Ordered by `updatedAt` descending, ties broken by insertion order. Each page is an index range scan.
+- Pagination never returns the same job twice. Jobs inserted or changed after the first page was read move to the front and are not included in later pages; start again from the first page to see them.
+- Cursors are opaque strings; they stay valid until the database is `VACUUM`ed.
+- `get()` and `count()` work as before.
+
+---
+
+## Upgrading from v0.1.0
+
+v0.2.0 upgrades an existing v0.1.0 database automatically the first time it is opened. **Rolling upgrades are not supported.** Use this procedure:
+
+1. **Stop every process that uses the queue**, using graceful shutdown (`worker.close()`, then `queue.close()`). Jobs that are still `active` when a process dies are recovered when their lease expires; that is safe, but slower.
+2. **Back up the database directory** (see [Backups](#backups)). There is no downgrade path.
+3. **Deploy v0.2.0 everywhere** and start the processes. The first one to open the database upgrades it; the others wait for it.
+
+What the upgrade does:
+
+- The schema version lives in `_durableq_meta` (`schema_version`: `1` → `2`).
+- It adds the `progress` column (default `0`), two inspection indexes, the `durableq_queues` and `durableq_schedules` tables, and rebuilds the claim index in a new column order. **No existing row is rewritten or deleted.** Queued, delayed, active (with their leases), completed, failed, and cancelled jobs, payloads, results, errors, attempt history, and dedupe keys are kept as they are.
+- The whole upgrade runs in one `BEGIN IMMEDIATE` transaction. If several processes start at once, one upgrades and the others wait (up to `busyTimeoutMs`) and then see the new version. If the process dies mid-upgrade, SQLite rolls it back and the next start tries again.
+- Building the indexes takes time proportional to the jobs table. On very large databases, give the first process a generous `busyTimeoutMs`.
+- A database created by a newer DurableQ is refused with `DurableQSchemaVersionError` and left untouched.
+
+Why not rolling: a v0.1.0 process that is already running when the database is upgraded keeps enqueueing, claiming, and settling (we verified this), but it **ignores `pause()`**, never creates schedule occurrences, and never runs retention. As soon as it restarts on v0.1.0 it refuses to open the upgraded database ("schema version 2 is newer than this package").
+
+Rollback: restore the backup taken in step 2 and redeploy v0.1.0. Jobs enqueued after the upgrade are not in that backup.
+
+The public API is backwards compatible. Additions: `JobView.progress`, `JobContext.updateProgress`, `QueueOptions.retention`, and the new `Queue` methods.
 
 ---
 
@@ -990,9 +1268,9 @@ Use a distributed queue or workflow system for those workloads.
 
 ---
 
-## Scope of v0.1
+## Scope of v0.2
 
-DurableQ v0.1 intentionally focuses on:
+DurableQ v0.2 intentionally focuses on:
 
 - named jobs;
 - typed inputs and outputs;
@@ -1007,12 +1285,17 @@ DurableQ v0.1 intentionally focuses on:
 - lease generation fencing;
 - crash recovery;
 - graceful shutdown;
-- job retention and cleanup;
+- job retention and cleanup, manual or automatic;
+- atomic bulk enqueue;
+- fixed-interval recurring jobs;
+- persistent pause/resume;
+- job progress;
+- queue statistics and job listing;
 - multiple Node.js processes on one host.
 
-Out of scope for v0.1:
+Out of scope for v0.2:
 
-- cron scheduling;
+- cron expressions and time-zone scheduling;
 - dashboards;
 - Redis;
 - PostgreSQL;
@@ -1021,7 +1304,6 @@ Out of scope for v0.1:
 - distributed multi-host execution;
 - workflows/DAGs;
 - parent/child jobs;
-- progress tracking;
 - plugins;
 - OpenTelemetry integration;
 - exactly-once execution.
@@ -1048,6 +1330,21 @@ The implementation and test suite are designed around failures such as:
 - handler overlap after lease loss.
 
 A green happy-path test suite is not considered sufficient evidence for a durable queue.
+
+---
+
+## Benchmarks
+
+Two scripts, both run against any source tree (`--src`), so versions can be compared on the same machine:
+
+```bash
+npm run bench                         # enqueue, workers, claim latency, stats, progress, scheduling, retention
+node bench/scaling.ts --repeat 3      # processes × concurrency matrix with full job accounting
+```
+
+`bench/scaling.ts` seeds the same jobs directly into SQLite for every scenario, starts all processes, and only then releases them together. It counts throughput as completed jobs over wall time, and checks that every job ends `completed`. It also reports duplicate handler executions, attempt outcomes, worker errors by class and code, storage errors by operation and SQLite error code, lock-wait and transaction times, CPU time, and database/WAL size. Processes and temporary files are removed after each scenario.
+
+Results for v0.2.0 on an Apple M1 (8 cores), macOS, Node.js 24.20.0, SQLite 3.53.4, WAL with `synchronous=FULL` are in [`bench/results`](bench/results). Highlights: single enqueue p50 0.10 ms; `addMany` about 26,500 jobs/s; claim p50 0.15 ms and p99 1.4 ms on a 102,000-row table; progress update p50 0.43 ms; retention about 32,000 deletions/s. These figures describe one machine, not a guarantee; storage with slower `fsync` (common on Linux servers with `synchronous=FULL`) can have noticeably higher write latency; measure on your own hardware.
 
 ---
 

@@ -4,6 +4,7 @@ import type { BackoffConfig, JobStatus, JsonValue, StoredError } from "../types.
 export type StorageOp =
   | "init"
   | "enqueue"
+  | "enqueueMany"
   | "get"
   | "count"
   | "claim"
@@ -13,6 +14,16 @@ export type StorageOp =
   | "manualRetry"
   | "cancelQueued"
   | "clean"
+  | "updateProgress"
+  | "setPaused"
+  | "isPaused"
+  | "stats"
+  | "list"
+  | "upsertSchedule"
+  | "getSchedule"
+  | "listSchedules"
+  | "removeSchedule"
+  | "applyRetention"
   | "recoverExpired"
   | "startLeaseTracking"
   | "stopLeaseTracking"
@@ -72,6 +83,25 @@ export type JobRow = {
   completed_at: number | null;
   failed_at: number | null;
   cancelled_at: number | null;
+  progress: number;
+};
+
+export type ScheduleRow = {
+  queue: string;
+  id: string;
+  name: string;
+  payload_json: string;
+  every_ms: number;
+  next_run_at: number;
+  max_attempts: number;
+  priority: number;
+  attempt_timeout_ms: number | null;
+  backoff_type: "none" | "fixed" | "exponential";
+  backoff_delay_ms: number;
+  backoff_max_delay_ms: number | null;
+  last_job_id: string | null;
+  created_at: number;
+  updated_at: number;
 };
 
 export type EnqueuePayload = {
@@ -85,6 +115,41 @@ export type EnqueuePayload = {
   dedupeKey: string | null;
   attemptTimeoutMs: number | null;
   backoff: BackoffConfig;
+};
+
+export type UpsertSchedulePayload = {
+  nowMs: number;
+  queue: string;
+  id: string;
+  name: string;
+  payloadJson: string;
+  everyMs: number;
+  maxAttempts: number;
+  priority: number;
+  attemptTimeoutMs: number | null;
+  backoff: BackoffConfig;
+};
+
+export type ProgressPayload = {
+  nowMs: number;
+  id: string;
+  workerId: string;
+  generation: number;
+  progress: number;
+};
+
+export type ListPayload = {
+  queue: string;
+  status: JobStatus | undefined;
+  name: string | undefined;
+  limit: number;
+  cursor: { updatedAt: number; rowid: number } | null;
+};
+
+export type RetentionPayload = {
+  nowMs: number;
+  queue: string;
+  rules: { status: "completed" | "failed" | "cancelled"; ageMs: number }[];
 };
 
 export type ClaimPayload = {

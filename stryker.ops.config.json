@@ -3,7 +3,7 @@
   "packageManager": "npm",
   "testRunner": "command",
   "commandRunner": {
-    "command": "node --test tests/integration/ops-state-machine.test.ts tests/integration/claim.test.ts tests/integration/fencing.test.ts tests/integration/recovery.test.ts tests/integration/enqueue.test.ts tests/integration/adversarial-audit.test.ts tests/model/db-state-machine.test.ts"
+    "command": "node --test tests/integration/ops-state-machine.test.ts tests/integration/claim.test.ts tests/integration/fencing.test.ts tests/integration/recovery.test.ts tests/integration/enqueue.test.ts tests/integration/adversarial-audit.test.ts tests/model/db-state-machine.test.ts tests/integration/schedule.test.ts tests/integration/pause.test.ts tests/integration/add-many.test.ts tests/integration/progress.test.ts tests/integration/inspect.test.ts tests/integration/retention.test.ts"
   },
   "mutate": ["src/storage/ops.ts"],
   "coverageAnalysis": "off",

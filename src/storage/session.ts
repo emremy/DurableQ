@@ -11,23 +11,37 @@ import { openDatabase, transact } from "./database.ts";
 import { migrate } from "./migrations.ts";
 import { LeaseTracker } from "./lease-tracker.ts";
 import {
+  applyRetention,
   cancelQueued,
   claimJob,
   cleanJobs,
   countJobs,
   enqueueJob,
   getJob,
+  getSchedule,
   heartbeatJob,
+  isPaused,
+  listJobs,
+  listSchedules,
   manualRetry,
   nextWakeHint,
+  queueStats,
   recoverExpiredLocked,
+  removeSchedule,
+  setPaused,
   settleFailure,
   settleSuccess,
+  updateProgress,
+  upsertSchedule,
 } from "./ops.ts";
 import type {
   ClaimPayload,
   EnqueuePayload,
   HeartbeatPayload,
+  ListPayload,
+  ProgressPayload,
+  RetentionPayload,
+  UpsertSchedulePayload,
   SettleFailurePayload,
   SettleSuccessPayload,
   StorageRequest,
@@ -48,6 +62,9 @@ export type StorageCuts = {
   claim?: TransactionCuts;
   settleSuccess?: TransactionCuts;
   settleFailure?: TransactionCuts;
+  progress?: TransactionCuts;
+  retention?: TransactionCuts;
+  migrate?: TransactionCuts;
 };
 
 export type StorageSession = {
@@ -105,7 +122,7 @@ export function createStorageSession(
         const p = req.payload as { path: string; busyTimeoutMs: number };
         if (!p?.path) throw new DurableQValidationError("init requires path");
         db = openDatabase(p.path, p.busyTimeoutMs);
-        migrate(db);
+        migrate(db, cuts.migrate);
         tracker = new LeaseTracker(
           db,
           () => currentNow(),
@@ -127,6 +144,52 @@ export function createStorageSession(
       case "enqueue": {
         const p = req.payload as EnqueuePayload;
         return withCuts(cuts.enqueue, () => enqueueJob(requireDb(), p));
+      }
+      case "enqueueMany": {
+        const p = req.payload as { items: EnqueuePayload[] };
+        return withCuts(cuts.enqueue, () => p.items.map((item) => enqueueJob(requireDb(), item)));
+      }
+      case "updateProgress": {
+        const p = req.payload as ProgressPayload;
+        withCuts(cuts.progress, () => updateProgress(requireDb(), p));
+        return { ok: true };
+      }
+      case "setPaused": {
+        const p = req.payload as { nowMs: number; queue: string; paused: boolean };
+        transact(requireDb(), () => setPaused(requireDb(), p));
+        return { ok: true };
+      }
+      case "isPaused": {
+        const p = req.payload as { queue: string };
+        return isPaused(requireDb(), p.queue);
+      }
+      case "stats": {
+        const p = req.payload as { queue: string; nowMs: number };
+        return transact(requireDb(), () => queueStats(requireDb(), p.queue, p.nowMs), "BEGIN");
+      }
+      case "list": {
+        const p = req.payload as ListPayload;
+        return transact(requireDb(), () => listJobs(requireDb(), p), "BEGIN");
+      }
+      case "upsertSchedule": {
+        const p = req.payload as UpsertSchedulePayload;
+        return transact(requireDb(), () => upsertSchedule(requireDb(), p));
+      }
+      case "getSchedule": {
+        const p = req.payload as { queue: string; id: string };
+        return getSchedule(requireDb(), p.queue, p.id);
+      }
+      case "listSchedules": {
+        const p = req.payload as { queue: string };
+        return listSchedules(requireDb(), p.queue);
+      }
+      case "removeSchedule": {
+        const p = req.payload as { queue: string; id: string };
+        return transact(requireDb(), () => removeSchedule(requireDb(), p.queue, p.id));
+      }
+      case "applyRetention": {
+        const p = req.payload as RetentionPayload;
+        return applyRetention(requireDb(), p, cuts.retention);
       }
       case "get": {
         const p = req.payload as { id: string };

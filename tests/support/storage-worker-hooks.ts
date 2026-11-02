@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parentPort } from "node:worker_threads";
 import {
+  DurableQBusyError,
   DurableQStorageError,
   DurableQStorageWorkerError,
   DurableQValidationError,
@@ -24,6 +25,11 @@ if (!parentPort) {
 const port = parentPort;
 let frozenNow: number | null = null;
 const faults = new Map<string, FaultSpec>();
+// Migration runs during init, before any RPC can configure faults.
+if (process.env.DURABLEQ_TEST_MIGRATE_FAULT) {
+  const spec = JSON.parse(process.env.DURABLEQ_TEST_MIGRATE_FAULT) as FaultSpec;
+  faults.set(spec.point, spec);
+}
 
 function now(): number {
   return frozenNow ?? Date.now();
@@ -35,6 +41,13 @@ function applyFault(point: string): void {
   if (spec.gateDir) {
     mkdirSync(spec.gateDir, { recursive: true });
     writeFileSync(join(spec.gateDir, "paused"), point);
+  }
+  if (spec.action === "busy") {
+    if (spec.times !== undefined) {
+      if (spec.times <= 0) return;
+      spec.times -= 1;
+    }
+    throw new DurableQBusyError("SQLITE_BUSY (injected)");
   }
   if (spec.action === "throw") {
     throw new DurableQStorageError(`injected fault: ${point}`);
@@ -75,6 +88,9 @@ const session = createStorageSession(
     claim: cutsFor("claim"),
     settleSuccess: cutsFor("settleSuccess"),
     settleFailure: cutsFor("settleFailure"),
+    progress: cutsFor("progress"),
+    retention: cutsFor("retention"),
+    migrate: cutsFor("migrate"),
   },
 );
 

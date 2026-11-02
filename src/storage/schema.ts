@@ -1,3 +1,4 @@
+// Version 1 baseline (v0.1.0). Never edit: schema changes go in MIGRATIONS.
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS _durableq_meta (
   key   TEXT PRIMARY KEY,
@@ -95,3 +96,53 @@ CREATE UNIQUE INDEX durableq_jobs_dedupe_idx
 ON durableq_jobs (queue, name, dedupe_key)
 WHERE dedupe_key IS NOT NULL;
 `;
+
+// MIGRATIONS[i] upgrades schema version i + 1 to i + 2. Append only.
+export const MIGRATIONS: readonly string[] = [
+  `
+ALTER TABLE durableq_jobs ADD COLUMN progress INTEGER NOT NULL DEFAULT 0
+  CHECK (progress BETWEEN 0 AND 100);
+
+-- The v1 claim index led with available_at, so every claim sorted all due jobs inside its
+-- write transaction (lock hold time grew with the backlog). This order matches the claim's
+-- ORDER BY, so a claim reads the first eligible entry instead.
+DROP INDEX durableq_jobs_claim_idx;
+CREATE INDEX durableq_jobs_claim_idx
+ON durableq_jobs (queue, status, priority DESC, available_at, created_at, id);
+
+CREATE INDEX durableq_jobs_status_updated_idx
+ON durableq_jobs (queue, status, updated_at);
+
+CREATE INDEX durableq_jobs_name_status_updated_idx
+ON durableq_jobs (queue, name, status, updated_at);
+
+CREATE TABLE durableq_queues (
+  queue              TEXT PRIMARY KEY,
+  paused             INTEGER NOT NULL DEFAULT 0 CHECK (paused IN (0, 1)),
+  retention_next_at  INTEGER NOT NULL DEFAULT 0,
+  updated_at         INTEGER NOT NULL
+) STRICT;
+
+CREATE TABLE durableq_schedules (
+  queue                TEXT NOT NULL,
+  id                   TEXT NOT NULL,
+  name                 TEXT NOT NULL,
+  payload_json         TEXT NOT NULL,
+  every_ms             INTEGER NOT NULL CHECK (every_ms >= 1),
+  next_run_at          INTEGER NOT NULL,
+  max_attempts         INTEGER NOT NULL CHECK (max_attempts >= 1),
+  priority             INTEGER NOT NULL,
+  attempt_timeout_ms   INTEGER,
+  backoff_type         TEXT NOT NULL CHECK (backoff_type IN ('none', 'fixed', 'exponential')),
+  backoff_delay_ms     INTEGER NOT NULL CHECK (backoff_delay_ms >= 0),
+  backoff_max_delay_ms INTEGER,
+  last_job_id          TEXT,
+  created_at           INTEGER NOT NULL,
+  updated_at           INTEGER NOT NULL,
+  PRIMARY KEY (queue, id)
+) STRICT;
+
+CREATE INDEX durableq_schedules_due_idx
+ON durableq_schedules (queue, next_run_at);
+`,
+];

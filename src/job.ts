@@ -42,6 +42,7 @@ export function jobRowToView(row: JobRow): JobView {
     completedAt: row.completed_at,
     failedAt: row.failed_at,
     cancelledAt: row.cancelled_at,
+    progress: row.progress,
   };
 }
 
@@ -75,5 +76,6 @@ export function sqliteRowToJobRow(raw: Record<string, unknown>): JobRow {
     completed_at: raw.completed_at === null ? null : Number(raw.completed_at),
     failed_at: raw.failed_at === null ? null : Number(raw.failed_at),
     cancelled_at: raw.cancelled_at === null ? null : Number(raw.cancelled_at),
+    progress: Number(raw.progress ?? 0),
   };
 }

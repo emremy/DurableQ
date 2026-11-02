@@ -64,7 +64,22 @@ export function normalizeQueueOptions(options: QueueOptions): NormalizedQueueOpt
   assertSafeInteger(busyTimeoutMs, "busyTimeoutMs", 0, 60 * 60 * 1000);
   assertSafeInteger(maxPayloadBytes, "maxPayloadBytes", 1, 64 * 1024 * 1024);
   assertSafeInteger(maxResultBytes, "maxResultBytes", 1, 64 * 1024 * 1024);
-  return { path: options.path, busyTimeoutMs, maxPayloadBytes, maxResultBytes };
+  const retention: NormalizedQueueOptions["retention"] = [];
+  if (options.retention !== undefined) {
+    if (!options.retention || typeof options.retention !== "object") {
+      throw new DurableQValidationError("retention must be an object");
+    }
+    for (const key of Object.keys(options.retention)) {
+      if (key !== "completed" && key !== "failed" && key !== "cancelled") {
+        throw new DurableQValidationError(`unknown retention status: ${key}`);
+      }
+      const rule = options.retention[key];
+      if (rule === undefined) continue;
+      assertSafeInteger(rule?.ageMs, `retention.${key}.ageMs`, 1, 100 * 365 * 24 * 60 * 60 * 1000);
+      retention.push({ status: key, ageMs: rule.ageMs });
+    }
+  }
+  return { path: options.path, busyTimeoutMs, maxPayloadBytes, maxResultBytes, retention };
 }
 
 export function normalizeAddOptions(options: AddOptions | undefined): NormalizedAddOptions {
